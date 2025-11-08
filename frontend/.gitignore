@@ -25,3 +25,5 @@
 # editor
 .vscode
 .idea
+.vercel
+.env*.local

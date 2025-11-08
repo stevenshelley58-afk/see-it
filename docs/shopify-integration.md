@@ -28,9 +28,11 @@ App Bridge Communication
 
 Authentication
 --------------
-- Use Shopify session token to authenticate requests from storefront to Vercel server functions.
-- Server verifies JWT with Shopify public keys before issuing signed upload URLs or session creation.
+- Use Shopify session token to authenticate requests from the embedded modal to Vercel server functions.
+- The modal fetches a fresh token via App Bridge `getSessionToken` before each API call and sends it in the `Authorization: Bearer <token>` header.
+- Server verifies JWTs against Shopify's JWKS before issuing signed upload URLs, creating sessions, or exposing product configuration.
 - Signed upload URL endpoint returns 403 if token invalid, expired, or missing `read_products`.
+- `GET /products/config?productId=...&variantId=...` hydrates the modal with metafields on demand; results are cached briefly in-memory.
 
 Variant Handling
 ----------------

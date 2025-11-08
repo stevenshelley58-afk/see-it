@@ -14,7 +14,7 @@ Configuration
 - `GCP_PROJECT_ID`: Google Cloud project containing Firestore and GCS.
 - `GCS_BUCKET_NAME`: Bucket used for room photo uploads and generated previews.
 - `SHOPIFY_*`: Credentials for the connected Shopify store.
-- `SHOPIFY_SESSION_TOKEN`: Admin API access token created for the app.
+- `SHOPIFY_ADMIN_ACCESS_TOKEN`: Admin API access token created for the app.
 - `VERTEX_LOCATION`: Region for Vertex AI (e.g., `us-central1`).
 - `VERTEX_MODEL`: Gemini model identifier.
 - `POSTMARK_SERVER_TOKEN`: API token for transactional emails.

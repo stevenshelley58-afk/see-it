@@ -14,8 +14,10 @@ const sessionsCollection = db.collection('sessions');
 
 type SessionInit = {
   productId: string;
-  productTitle?: string;
-  variantId?: string;
+  productTitle?: string | null;
+  variantId?: string | null;
+  shopOrigin?: string | null;
+  locale?: string | null;
 };
 
 export const firestore = {
@@ -23,15 +25,26 @@ export const firestore = {
     const ref = sessionsCollection.doc(sessionId);
     const snapshot = await ref.get();
 
+    const baseData = {
+      productId: init.productId,
+      productTitle: init.productTitle ?? null,
+      variantId: init.variantId ?? null,
+      shopOrigin: init.shopOrigin ?? null,
+      locale: init.locale ?? null
+    };
+
     if (!snapshot.exists) {
       await ref.set({
+        ...baseData,
         createdAt: new Date(),
-        productId: init.productId,
-        productTitle: init.productTitle ?? null,
-        variantId: init.variantId ?? null,
         generatedImageURLs: []
       });
       logger.debug({ sessionId }, 'Created session');
+    } else {
+      await ref.update({
+        ...baseData,
+        updatedAt: new Date()
+      });
     }
   },
 

@@ -13,6 +13,50 @@ body {
   color: #111827;
 }
 
+.skeleton {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    rgba(17, 24, 39, 0.08) 25%,
+    rgba(17, 24, 39, 0.15) 37%,
+    rgba(17, 24, 39, 0.08) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 12px;
+}
+
+.skeleton-text-lg {
+  width: 70%;
+  height: 28px;
+}
+
+.skeleton-text-sm {
+  width: 140px;
+  height: 18px;
+}
+
+.skeleton-thumb {
+  width: 88px;
+  height: 88px;
+  border-radius: 16px;
+}
+
+.skeleton-frame {
+  width: 100%;
+  height: 220px;
+  border-radius: 24px;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
 button {
   font-family: inherit;
 }
@@ -150,11 +194,12 @@ button {
   background-color: #111827;
 }
 
-.carousel img {
+.carousel-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: inherit;
 }
 
 .carousel-caption {
@@ -237,6 +282,16 @@ button {
   touch-action: none;
 }
 
+.placement-canvas.is-disabled {
+  cursor: wait;
+}
+
+.canvas-skeleton {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
 .placement-canvas.show-guides::after {
   content: '';
   position: absolute;
@@ -268,10 +323,12 @@ button {
   transition: transform 0.15s ease-out;
 }
 
-.product-handle img {
+.product-image {
   width: 200px;
+  height: auto;
   pointer-events: none;
   user-select: none;
+  display: block;
 }
 
 .placement-actions {
@@ -285,6 +342,16 @@ button {
   justify-content: center;
   text-align: center;
   gap: 24px;
+}
+
+.loading-frame {
+  width: 100%;
+}
+
+.loading-gallery {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }
 
 .spinner {
@@ -324,10 +391,11 @@ button {
   overflow: hidden;
 }
 
-.preview-thumb img {
+.preview-thumb-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .preview-thumb.is-active {
@@ -347,14 +415,11 @@ button {
   border-radius: 24px;
   overflow: hidden;
   background: #0f172a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  min-height: 260px;
 }
 
-.preview-image-wrapper img {
-  width: 100%;
-  height: 100%;
+.preview-image {
   object-fit: cover;
 }
 

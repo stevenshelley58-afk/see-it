@@ -1,6 +1,16 @@
 const apiVersion = process.env.SHOPIFY_API_VERSION ?? '2024-07';
 const shopDomain = process.env.SHOPIFY_SHOP;
-const accessToken = process.env.SHOPIFY_SESSION_TOKEN;
+const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN ?? process.env.SHOPIFY_SESSION_TOKEN;
+const cacheTtlMs = Number(process.env.SHOPIFY_CONFIG_CACHE_TTL_MS ?? 120_000);
+
+type ProductConfig = {
+  prompt: string;
+  productImageUrl: string | null;
+  variantId: string | null;
+  productTitle: string;
+};
+
+const productConfigCache = new Map<string, { expiresAt: number; value: ProductConfig }>();
 
 type ShopifyImage = {
   id?: number | string;
@@ -45,7 +55,7 @@ function assertShopifyConfig() {
     throw new Error('Missing SHOPIFY_SHOP environment variable');
   }
   if (!accessToken) {
-    throw new Error('Missing SHOPIFY_SESSION_TOKEN for backend app auth');
+    throw new Error('Missing SHOPIFY_ADMIN_ACCESS_TOKEN for backend app auth');
   }
 }
 
@@ -116,6 +126,13 @@ export const shopify = {
       throw new Error('Invalid productId');
     }
 
+    const cacheKey = `${normalizedProductId}:${variantId ?? 'default'}`;
+    const now = Date.now();
+    const cached = productConfigCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
+
     const product = await shopifyRequest<ShopifyProductResponse>(`products/${normalizedProductId}.json`, {
       fields: 'id,title,image,images,variants'
     });
@@ -147,12 +164,16 @@ export const shopify = {
       product.product.image?.src ??
       null;
 
-    return {
+    const value: ProductConfig = {
       prompt,
       productImageUrl,
       variantId: variantId ?? null,
       productTitle: product.product.title
     };
+
+    productConfigCache.set(cacheKey, { value, expiresAt: now + cacheTtlMs });
+
+    return value;
   }
 };
 

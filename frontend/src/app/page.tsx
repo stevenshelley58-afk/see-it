@@ -1,14 +1,22 @@
 /* eslint-disable jsx-a11y/media-has-caption */
 'use client';
 
+import NextImage from 'next/image';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { createSession, requestGeneratedPreview, requestSignedUpload, sendSessionEmail } from '../lib/api';
+import {
+  createSession,
+  fetchProductConfig,
+  requestGeneratedPreview,
+  requestSignedUpload,
+  sendSessionEmail
+} from '../lib/api';
 import { analytics } from '../lib/analytics';
-import { mockApiEnabled } from '../lib/config';
+import { mockApiEnabled, mockPreviewPlaceholders } from '../lib/config';
 import { dataUrlToFile, downscaleImage } from '../lib/image';
+import { fetchSessionToken, fetchShopifyContext } from '../lib/shopifyBridge';
 
 type Step = 'welcome' | 'crop' | 'placement' | 'loading' | 'preview' | 'email';
 
@@ -19,12 +27,12 @@ type Placement = {
   rotation: number;
 };
 
-const product = {
-  id: 'gid://shopify/Product/123456789',
-  title: 'Modern Velvet Armchair',
-  price: '$499',
-  image:
-    'https://images.unsplash.com/photo-1616628182501-0bbcfd084d94?auto=format&fit=crop&w=600&q=80'
+type ProductInfo = {
+  id: string;
+  title: string;
+  image: string | null;
+  variantId?: string | null;
+  locale?: string | null;
 };
 
 const defaultPlacement: Placement = {
@@ -34,10 +42,22 @@ const defaultPlacement: Placement = {
   rotation: 0
 };
 
+const fallbackProduct: ProductInfo = {
+  id: 'mock-product',
+  title: 'Modern Velvet Armchair',
+  image: mockPreviewPlaceholders[0],
+  variantId: null,
+  locale: 'en'
+};
+
 export default function HomePage() {
   const mockMode = mockApiEnabled;
   const [step, setStep] = useState<Step>('welcome');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [product, setProduct] = useState<ProductInfo | null>(null);
+  const [productLoading, setProductLoading] = useState(true);
+  const [productError, setProductError] = useState<string | null>(null);
+  const [shopLocale, setShopLocale] = useState<string | null>(null);
   const [rawRoomPhoto, setRawRoomPhoto] = useState<string | null>(null);
   const [croppedRoomPhoto, setCroppedRoomPhoto] = useState<string | null>(null);
   const [placement, setPlacement] = useState<Placement>(defaultPlacement);
@@ -46,10 +66,92 @@ export default function HomePage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapProduct() {
+      setProductLoading(true);
+      try {
+        const context = await fetchShopifyContext();
+        if (cancelled) return;
+
+        setShopLocale(context.locale ?? null);
+
+        const effectiveProductId = context.productId ?? (mockMode ? fallbackProduct.id : undefined);
+        if (!effectiveProductId) {
+          throw new Error('Launch the app from a Shopify product page so we know which item to preview.');
+        }
+
+        const authToken = mockMode ? null : await fetchSessionToken();
+        if (!mockMode && !authToken) {
+          throw new Error('We could not verify the storefront session. Refresh the product page and try again.');
+        }
+
+        const config = await fetchProductConfig({
+          productId: effectiveProductId,
+          variantId: context.variantId ?? undefined,
+          authToken: authToken ?? undefined
+        });
+
+        if (cancelled) return;
+
+        setProduct({
+          id: effectiveProductId,
+          variantId: config.variantId ?? context.variantId ?? null,
+          title: config.productTitle,
+          image: config.productImageUrl ?? fallbackProduct.image,
+          locale: context.locale ?? null
+        });
+        setProductError(null);
+      } catch (error) {
+        if (cancelled) return;
+        if (mockMode) {
+          setProduct(fallbackProduct);
+          setProductError(null);
+        } else {
+          setProductError(
+            (error as Error)?.message ??
+              'We could not load product details right now. Please refresh and try again.'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setProductLoading(false);
+        }
+      }
+    }
+
+    bootstrapProduct();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mockMode]);
+
+  const requestAuthToken = useCallback(async () => {
+    if (mockMode) {
+      return null;
+    }
+    const token = await fetchSessionToken();
+    if (!token) {
+      throw new Error('Missing Shopify session token');
+    }
+    return token;
+  }, [mockMode]);
+
   const handleCreateSession = useCallback(async () => {
     if (sessionId) return sessionId;
+    if (!product) {
+      throw new Error('Product data not ready');
+    }
     try {
-      const res = await createSession({ productId: product.id });
+      const authToken = await requestAuthToken();
+      const res = await createSession({
+        productId: product.id,
+        variantId: product.variantId ?? undefined,
+        locale: product.locale ?? shopLocale ?? undefined,
+        authToken: authToken ?? undefined
+      });
       setSessionId(res.sessionId);
       return res.sessionId;
     } catch (error) {
@@ -58,7 +160,7 @@ export default function HomePage() {
       setSessionId(uuid);
       return uuid;
     }
-  }, [sessionId]);
+  }, [product, requestAuthToken, sessionId, shopLocale]);
 
   const onPhotoSelected = useCallback(
     async (file: File) => {
@@ -89,14 +191,16 @@ export default function HomePage() {
   );
 
   const onGeneratePreview = useCallback(async () => {
-    if (!croppedRoomPhoto) return;
+    if (!croppedRoomPhoto || !product) return;
     setStep('loading');
     const session = await handleCreateSession();
     analytics.track('placement_submitted', { sessionId: session });
     try {
       const objectName = `${session}/room-${Date.now()}.jpg`;
+      const authToken = await requestAuthToken();
       const signed = await requestSignedUpload({
-        objectName
+        objectName,
+        authToken: authToken ?? undefined
       });
 
       if (!mockMode) {
@@ -117,7 +221,9 @@ export default function HomePage() {
         sessionId: session,
         roomImageGcsUrl: signed.gcsUrl,
         productId: product.id,
-        placement
+        placement,
+        locale: product.locale ?? shopLocale ?? undefined,
+        authToken: authToken ?? undefined
       });
 
       setPreviewError(null);
@@ -133,7 +239,7 @@ export default function HomePage() {
       analytics.track('preview_failed', { message: (error as Error)?.message });
       setStep('preview');
     }
-  }, [croppedRoomPhoto, handleCreateSession, mockMode, placement]);
+  }, [croppedRoomPhoto, handleCreateSession, mockMode, placement, product, requestAuthToken, shopLocale]);
 
   const onAdjust = () => {
     analytics.track('cta_click', { action: 'adjust_preview' });
@@ -149,9 +255,14 @@ export default function HomePage() {
   return (
     <main className="app-shell">
       <div className="phone-frame">
-        <TopBar productTitle={product.title} onClose={onBackToStore} />
+        <TopBar productTitle={product?.title ?? fallbackProduct.title} isLoading={productLoading} onClose={onBackToStore} />
         {step === 'welcome' && (
-          <StepWelcome productTitle={product.title} onSelectFile={onPhotoSelected} />
+          <StepWelcome
+            productTitle={product?.title ?? fallbackProduct.title}
+            isLoading={productLoading}
+            errorMessage={productError}
+            onSelectFile={onPhotoSelected}
+          />
         )}
         {step === 'crop' && rawRoomPhoto && (
           <StepCrop source={rawRoomPhoto} onConfirm={onConfirmCrop} onBack={() => setStep('welcome')} />
@@ -159,10 +270,11 @@ export default function HomePage() {
         {step === 'placement' && croppedRoomPhoto && (
           <StepPlacement
             background={croppedRoomPhoto}
-            productImage={product.image}
+            productImage={product?.image ?? null}
             placement={placement}
             onPlacementChange={setPlacement}
             onGeneratePreview={onGeneratePreview}
+            isProductReady={!productLoading && Boolean(product?.image)}
             onBack={() => setStep('crop')}
           />
         )}
@@ -170,7 +282,7 @@ export default function HomePage() {
         {step === 'preview' && previewUrl && (
           <StepPreview
             previewUrl={previewUrl}
-            productTitle={product.title}
+            productTitle={product?.title ?? fallbackProduct.title}
             errorMessage={previewError}
             history={previewHistory}
             onSelectHistory={setPreviewUrl}
@@ -181,6 +293,8 @@ export default function HomePage() {
         {emailModalOpen && (
           <EmailModal
             sessionId={sessionId}
+            mockMode={mockMode}
+            requestAuthToken={requestAuthToken}
             onClose={() => {
               setEmailModalOpen(false);
               setStep('welcome');
@@ -194,10 +308,12 @@ export default function HomePage() {
 
 type StepWelcomeProps = {
   productTitle: string;
+  isLoading: boolean;
+  errorMessage: string | null;
   onSelectFile: (file: File) => Promise<void>;
 };
 
-function StepWelcome({ productTitle, onSelectFile }: StepWelcomeProps) {
+function StepWelcome({ productTitle, isLoading, errorMessage, onSelectFile }: StepWelcomeProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -219,9 +335,13 @@ function StepWelcome({ productTitle, onSelectFile }: StepWelcomeProps) {
   return (
     <section className="screen">
       <div className="carousel">
-        <img
+        <NextImage
           src="https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=600&q=60"
           alt="Living room inspiration"
+          width={600}
+          height={400}
+          className="carousel-image"
+          priority
         />
         <div className="carousel-caption">
           <h2>See it in your home</h2>
@@ -229,16 +349,27 @@ function StepWelcome({ productTitle, onSelectFile }: StepWelcomeProps) {
         </div>
       </div>
       <div className="screen-content">
-        <h1>See {productTitle} in your home.</h1>
+        <h1>
+          {isLoading ? (
+            <span className="skeleton skeleton-text-lg" aria-hidden="true" />
+          ) : (
+            `See ${productTitle} in your home.`
+          )}
+        </h1>
         <p className="body-text">
           Take a quick photo or upload one from your library. You’ll add the product in the next step.
         </p>
+        {errorMessage && !isLoading && (
+          <p className="error-banner" role="alert">
+            {errorMessage}
+          </p>
+        )}
       </div>
       <div className="button-stack">
-        <button className="btn btn-primary" onClick={() => handleClick(true)}>
+        <button className="btn btn-primary" onClick={() => handleClick(true)} disabled={isLoading}>
           Take Photo
         </button>
-        <button className="btn btn-secondary" onClick={() => handleClick(false)}>
+        <button className="btn btn-secondary" onClick={() => handleClick(false)} disabled={isLoading}>
           Upload Photo
         </button>
         <input
@@ -352,11 +483,12 @@ function StepCrop({ source, onConfirm, onBack }: StepCropProps) {
 
 type StepPlacementProps = {
   background: string;
-  productImage: string;
+  productImage: string | null;
   placement: Placement;
   onPlacementChange: (p: Placement) => void;
   onGeneratePreview: () => void;
   onBack: () => void;
+  isProductReady: boolean;
 };
 
 function StepPlacement({
@@ -365,7 +497,8 @@ function StepPlacement({
   placement,
   onPlacementChange,
   onGeneratePreview,
-  onBack
+  onBack,
+  isProductReady
 }: StepPlacementProps) {
   const [showGuides, setShowGuides] = useState(false);
 
@@ -397,28 +530,42 @@ function StepPlacement({
         placement={placement}
         onChange={onPlacementChange}
         showGuides={showGuides}
+        isLoading={!isProductReady}
       />
       <div className="placement-actions">
         <button className="btn btn-tertiary" onClick={onBack}>
           Back
         </button>
-        <button className="btn btn-primary" onClick={onGeneratePreview}>
+        <button className="btn btn-primary" onClick={onGeneratePreview} disabled={!isProductReady}>
           See how it looks
         </button>
       </div>
+      {!isProductReady && (
+        <p className="helper-text" role="status">
+          Loading product assets…
+        </p>
+      )}
     </section>
   );
 }
 
 type PlacementCanvasProps = {
   background: string;
-  productImage: string;
+  productImage: string | null;
   placement: Placement;
   onChange: (p: Placement) => void;
   showGuides?: boolean;
+  isLoading?: boolean;
 };
 
-function PlacementCanvas({ background, productImage, placement, onChange, showGuides = false }: PlacementCanvasProps) {
+function PlacementCanvas({
+  background,
+  productImage,
+  placement,
+  onChange,
+  showGuides = false,
+  isLoading = false
+}: PlacementCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const initial = useRef<{
@@ -438,7 +585,10 @@ function PlacementCanvas({ background, productImage, placement, onChange, showGu
     [onChange, placement]
   );
 
+  const canInteract = Boolean(productImage) && !isLoading;
+
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canInteract) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.current.size === 1) {
@@ -456,6 +606,7 @@ function PlacementCanvas({ background, productImage, placement, onChange, showGu
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canInteract) return;
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
@@ -487,6 +638,7 @@ function PlacementCanvas({ background, productImage, placement, onChange, showGu
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canInteract) return;
     pointers.current.delete(event.pointerId);
     initial.current = { placement };
   };
@@ -500,16 +652,26 @@ function PlacementCanvas({ background, productImage, placement, onChange, showGu
   return (
     <div
       ref={containerRef}
-      className={`placement-canvas${showGuides ? ' show-guides' : ''}`}
+      className={`placement-canvas${showGuides ? ' show-guides' : ''}${!canInteract ? ' is-disabled' : ''}`}
       style={{ backgroundImage: `url(${background})` }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      <div className="product-handle" style={transformStyle}>
-        <img src={productImage} alt="Selected product" draggable={false} />
-      </div>
+      {!canInteract && <div className="skeleton canvas-skeleton" aria-hidden="true" />}
+      {productImage && (
+        <div className="product-handle" style={transformStyle}>
+          <NextImage
+            src={productImage}
+            alt="Selected product"
+            width={600}
+            height={600}
+            className="product-image"
+            draggable={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -521,6 +683,14 @@ function clamp(value: number, min: number, max: number) {
 function StepLoading() {
   return (
     <section className="screen loading" aria-live="polite" aria-busy="true">
+      <div className="loading-frame">
+        <div className="skeleton skeleton-frame" aria-hidden="true" />
+      </div>
+      <div className="loading-gallery" aria-hidden="true">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="skeleton skeleton-thumb" />
+        ))}
+      </div>
       <div className="spinner" />
       <p>Creating your preview...</p>
     </section>
@@ -541,7 +711,14 @@ function StepPreview({ previewUrl, productTitle, onAdjust, onBackToStore, errorM
   return (
     <section className="screen preview">
       <div className="preview-image-wrapper">
-        <img src={previewUrl} alt={`${productTitle} in your space`} />
+        <NextImage
+          src={previewUrl}
+          alt={`${productTitle} in your space`}
+          fill
+          sizes="(max-width: 768px) 90vw, 420px"
+          className="preview-image"
+          priority
+        />
       </div>
       {errorMessage && (
         <p className="error-banner" role="alert">
@@ -557,7 +734,13 @@ function StepPreview({ previewUrl, productTitle, onAdjust, onBackToStore, errorM
               className={`preview-thumb${url === previewUrl ? ' is-active' : ''}`}
               onClick={() => onSelectHistory(url)}
             >
-              <img src={url} alt="Preview option" />
+              <NextImage
+                src={url}
+                alt="Preview option"
+                width={88}
+                height={88}
+                className="preview-thumb-image"
+              />
             </button>
           ))}
         </div>
@@ -576,10 +759,12 @@ function StepPreview({ previewUrl, productTitle, onAdjust, onBackToStore, errorM
 
 type EmailModalProps = {
   sessionId: string | null;
+  requestAuthToken: () => Promise<string | null>;
+  mockMode: boolean;
   onClose: () => void;
 };
 
-function EmailModal({ sessionId, onClose }: EmailModalProps) {
+function EmailModal({ sessionId, requestAuthToken, mockMode, onClose }: EmailModalProps) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -605,7 +790,11 @@ function EmailModal({ sessionId, onClose }: EmailModalProps) {
     }
     setStatus('sending');
     try {
-      await sendSessionEmail({ sessionId, email });
+      const authToken = await requestAuthToken();
+      if (!authToken && !mockMode) {
+        throw new Error('Missing Shopify session token');
+      }
+      await sendSessionEmail({ sessionId, email, authToken: authToken ?? undefined });
       analytics.track('email_sent', { sessionId, status: 'success' });
       setStatus('sent');
       setTimeout(onClose, 900);
@@ -678,15 +867,18 @@ function EmailModal({ sessionId, onClose }: EmailModalProps) {
 type TopBarProps = {
   productTitle: string;
   onClose: () => void;
+  isLoading?: boolean;
 };
 
-function TopBar({ productTitle, onClose }: TopBarProps) {
+function TopBar({ productTitle, onClose, isLoading = false }: TopBarProps) {
   return (
     <header className="top-bar">
       <button className="icon-button" onClick={onClose} aria-label="Close preview">
         ×
       </button>
-      <span className="product-name">{productTitle}</span>
+      <span className="product-name">
+        {isLoading ? <span className="skeleton skeleton-text-sm" aria-hidden="true" /> : productTitle}
+      </span>
       <button className="icon-button" aria-label="Share preview">
         ☰
       </button>

@@ -8,10 +8,18 @@ import { registerGeneratePreviewRoute } from './routes/generatePreview.js';
 import { registerSessionRoute } from './routes/sessions.js';
 import { registerUploadRoute } from './routes/uploads.js';
 import { registerSendEmailRoute } from './routes/sendEmail.js';
+import { shopifySessionMiddleware } from './middleware/shopifyAuth.js';
+import { registerProductConfigRoute } from './routes/productConfig.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
-const allowedOrigins =
+const shopDomain = process.env.SHOPIFY_SHOP;
+const configuredOrigins =
   process.env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? [];
+const impliedShopOrigin =
+  shopDomain && !shopDomain.startsWith('https://') ? `https://${shopDomain}` : shopDomain;
+const allowedOrigins = Array.from(
+  new Set(configuredOrigins.concat(impliedShopOrigin ? [impliedShopOrigin] : []))
+).filter(Boolean);
 
 export function createApp() {
   const app = express();
@@ -40,6 +48,8 @@ export function createApp() {
   );
   app.use(express.json({ limit: '10mb' }));
 
+  app.use(shopifySessionMiddleware);
+
   app.get('/healthz', (_req, res) => {
     res.json({ status: 'ok' });
   });
@@ -48,6 +58,7 @@ export function createApp() {
   registerGeneratePreviewRoute(app);
   registerUploadRoute(app);
   registerSendEmailRoute(app);
+  registerProductConfigRoute(app);
 
   return app;
 }

@@ -16,7 +16,8 @@ const requestSchema = z.object({
     rotation: z.number()
   }),
   sessionId: z.string().uuid().or(z.string().min(8)),
-  variantId: z.string().optional()
+  variantId: z.string().optional(),
+  locale: z.string().optional()
 });
 
 export function registerGeneratePreviewRoute(app: Express) {
@@ -26,14 +27,16 @@ export function registerGeneratePreviewRoute(app: Express) {
       return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
     }
 
-    const { roomImageGcsUrl, productId, placement, sessionId, variantId } = parsed.data;
+    const { roomImageGcsUrl, productId, placement, sessionId, variantId, locale } = parsed.data;
 
     try {
       const productConfig = await shopify.fetchProductConfig(productId, variantId);
       await firestore.ensureSession(sessionId, {
         productId,
         variantId,
-        productTitle: productConfig.productTitle
+        productTitle: productConfig.productTitle,
+        shopOrigin: req.shopifySession?.shopOrigin ?? null,
+        locale: locale ?? null
       });
 
       const generatedUrl = await generatePreviewImage({

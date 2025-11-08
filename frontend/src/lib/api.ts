@@ -22,6 +22,13 @@ const emailResponseSchema = z.object({
   status: z.string()
 });
 
+const productConfigSchema = z.object({
+  prompt: z.string(),
+  productImageUrl: z.string().url().nullable(),
+  variantId: z.string().nullable(),
+  productTitle: z.string()
+});
+
 function randomItem<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -32,7 +39,12 @@ function wait(ms: number) {
   });
 }
 
-export async function createSession(params: { productId: string; variantId?: string }) {
+export async function createSession(params: {
+  productId: string;
+  variantId?: string;
+  locale?: string;
+  authToken?: string;
+}) {
   if (mockApiEnabled) {
     await wait(150);
     const uuid =
@@ -42,12 +54,11 @@ export async function createSession(params: { productId: string; variantId?: str
     return { sessionId: uuid };
   }
 
+  const { authToken, ...body } = params;
   const res = await fetch(`${backendBaseUrl}/sessions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(params)
+    headers: buildJsonHeaders(authToken),
+    body: JSON.stringify(body)
   });
 
   if (!res.ok) {
@@ -58,7 +69,7 @@ export async function createSession(params: { productId: string; variantId?: str
   return sessionSchema.parse(json);
 }
 
-export async function requestSignedUpload(params: { objectName: string; contentType?: string }) {
+export async function requestSignedUpload(params: { objectName: string; contentType?: string; authToken?: string }) {
   if (mockApiEnabled) {
     await wait(120);
     return {
@@ -68,12 +79,11 @@ export async function requestSignedUpload(params: { objectName: string; contentT
     };
   }
 
+  const { authToken, ...body } = params;
   const res = await fetch(`${backendBaseUrl}/uploads/sign`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(params)
+    headers: buildJsonHeaders(authToken),
+    body: JSON.stringify(body)
   });
 
   if (!res.ok) {
@@ -89,6 +99,8 @@ export async function requestGeneratedPreview(params: {
   roomImageGcsUrl: string;
   productId: string;
   placement: { x: number; y: number; scale: number; rotation: number };
+  locale?: string;
+  authToken?: string;
 }) {
   if (mockApiEnabled) {
     await wait(600);
@@ -99,12 +111,11 @@ export async function requestGeneratedPreview(params: {
     };
   }
 
+  const { authToken, ...body } = params;
   const res = await fetch(`${backendBaseUrl}/generate-preview`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(params)
+    headers: buildJsonHeaders(authToken),
+    body: JSON.stringify(body)
   });
 
   if (!res.ok) {
@@ -115,18 +126,17 @@ export async function requestGeneratedPreview(params: {
   return previewResponseSchema.parse(json);
 }
 
-export async function sendSessionEmail(params: { sessionId: string; email: string }) {
+export async function sendSessionEmail(params: { sessionId: string; email: string; authToken?: string }) {
   if (mockApiEnabled) {
     await wait(300);
     return emailResponseSchema.parse({ status: 'sent' });
   }
 
+  const { authToken, ...body } = params;
   const res = await fetch(`${backendBaseUrl}/send-session-email`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(params)
+    headers: buildJsonHeaders(authToken),
+    body: JSON.stringify(body)
   });
 
   if (!res.ok) {
@@ -135,5 +145,45 @@ export async function sendSessionEmail(params: { sessionId: string; email: strin
 
   const json = await res.json();
   return emailResponseSchema.parse(json);
+}
+
+export async function fetchProductConfig(params: { productId: string; variantId?: string; authToken?: string }) {
+  if (mockApiEnabled) {
+    await wait(150);
+    return productConfigSchema.parse({
+      prompt: 'A hero shot of the product styled in a modern coastal living room',
+      productImageUrl:
+        'https://images.unsplash.com/photo-1616628182501-0bbcfd084d94?auto=format&fit=crop&w=800&q=70',
+      variantId: params.variantId ?? null,
+      productTitle: 'Modern Velvet Armchair'
+    });
+  }
+
+  const url = new URL(`${backendBaseUrl}/products/config`);
+  url.searchParams.set('productId', params.productId);
+  if (params.variantId) {
+    url.searchParams.set('variantId', params.variantId);
+  }
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: params.authToken ? { Authorization: `Bearer ${params.authToken}` } : undefined
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to load product config (${res.status})`);
+  }
+
+  return productConfigSchema.parse(await res.json());
+}
+
+function buildJsonHeaders(authToken?: string): HeadersInit {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  return headers;
 }
 

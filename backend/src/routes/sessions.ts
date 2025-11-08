@@ -6,7 +6,8 @@ import { firestore } from '../services/firestore.js';
 
 const bodySchema = z.object({
   productId: z.string(),
-  variantId: z.string().optional()
+  variantId: z.string().optional(),
+  locale: z.string().optional()
 });
 
 export function registerSessionRoute(app: Express) {
@@ -17,7 +18,10 @@ export function registerSessionRoute(app: Express) {
     }
 
     const sessionId = randomUUID();
-    await firestore.ensureSession(sessionId, parsed.data);
+    await firestore.ensureSession(sessionId, {
+      ...parsed.data,
+      shopOrigin: req.shopifySession?.shopOrigin ?? null
+    });
 
     res.status(201).json({ sessionId });
   });

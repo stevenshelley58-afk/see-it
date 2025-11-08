@@ -16,7 +16,8 @@ Build Artifacts
 Configuration Inputs
 --------------------
 - Copy `frontend/env.sample` → `.env.local`; set `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_UPLOAD_CDN_BASE`.
-- Copy `backend/env.sample` → `.env`; populate GCP, Vertex, Shopify, Postmark, and CORS secrets.
+- Copy `frontend/env.sample` → `.env.local`; set `NEXT_PUBLIC_BACKEND_URL`, `NEXT_PUBLIC_UPLOAD_CDN_BASE`, `NEXT_PUBLIC_SHOPIFY_API_KEY`, and disable mocks (`NEXT_PUBLIC_USE_MOCKS=false`).
+- Copy `backend/env.sample` → `.env`; populate GCP, Vertex, Shopify (including `SHOPIFY_ADMIN_ACCESS_TOKEN`), Postmark, and CORS secrets.
 - Ensure secrets are stored in the team vault and mirrored to Vercel (frontend) + Cloud Run (backend).
 
 Deployment Steps

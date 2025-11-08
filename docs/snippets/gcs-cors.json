@@ -1,0 +1,20 @@
+[
+  {
+    "origin": [
+      "https://yourstorefront.com",
+      "https://preview.yourstorefront.com"
+    ],
+    "method": [
+      "GET",
+      "HEAD",
+      "POST",
+      "OPTIONS"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Access-Control-Allow-Origin"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
+

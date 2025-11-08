@@ -1,0 +1,24 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Environments
+.env
+.env.*
+backend/.env
+frontend/.env.local
+
+# Build outputs
+backend/dist/
+frontend/.next/
+frontend/out/
+
+# Logs
+logs/
+*.log
+
+# Editor/Tooling
+.DS_Store
+.vercel
+
+

@@ -2,8 +2,28 @@ import type { Request, Response, NextFunction } from 'express';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
 const apiKey = process.env.SHOPIFY_API_KEY;
-const shopDomain = process.env.SHOPIFY_SHOP;
 const jwksUrl = new URL('https://shopify.com/admin/oauth/jwks.json');
+
+function parseList(value: string | undefined) {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function normalizeShopDomain(domain: string) {
+  const withoutProtocol = domain.replace(/^https?:\/\//i, '');
+  return withoutProtocol.replace(/\/+$/, '');
+}
+
+const allowedShopDomains = Array.from(
+  new Set(
+    parseList(process.env.SHOPIFY_SHOP)
+      .concat(parseList(process.env.SHOPIFY_ALLOWED_SHOPS))
+      .map(normalizeShopDomain)
+  )
+).filter((domain) => domain.length > 0);
 
 type ShopifySession = {
   shop: string;
@@ -47,27 +67,33 @@ export async function shopifySessionMiddleware(req: Request, res: Response, next
   }
 
   try {
-    const issuer = deriveExpectedIssuer(shopDomain);
+    const expectedIssuers = allowedShopDomains
+      .map((domain) => deriveExpectedIssuer(domain))
+      .filter((issuer): issuer is string => Boolean(issuer));
+
     const { payload } = await jwtVerify(token, jwks, {
-      issuer,
+      issuer: expectedIssuers.length ? expectedIssuers : undefined,
       audience: apiKey
     });
 
     const dest = typeof payload.dest === 'string' ? payload.dest : undefined;
     const shop = typeof payload.sub === 'string' ? payload.sub : undefined;
-    const shopOrigin = dest ?? (shop ? `https://${shop}` : undefined);
+    const shopUrl = (dest ?? (shop ? `https://${shop}` : undefined)) ?? null;
+    const originUrl = shopUrl ? new URL(shopUrl) : null;
+    const normalizedOrigin = originUrl ? `${originUrl.protocol}//${originUrl.host}` : null;
+    const shopHost = originUrl?.host ?? (shop ? normalizeShopDomain(shop) : null);
 
-    if (!shopOrigin) {
+    if (!normalizedOrigin || !shopHost) {
       throw new Error('Unable to resolve shop origin from session token');
     }
 
-    if (shopDomain && !shopOrigin.includes(shopDomain)) {
+    if (allowedShopDomains.length > 0 && !allowedShopDomains.includes(shopHost)) {
       throw new Error('Session token shop mismatch');
     }
 
     req.shopifySession = {
-      shop: shop ?? shopOrigin,
-      shopOrigin,
+      shop: shopHost,
+      shopOrigin: normalizedOrigin,
       sessionToken: token,
       payload
     };

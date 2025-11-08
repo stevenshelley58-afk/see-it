@@ -4,10 +4,11 @@ Infrastructure Blueprint
 Google Cloud
 ------------
 - **Project**: Shared with Firestore + Cloud Storage (variable `GCP_PROJECT_ID`).
-- **Firestore**: Native mode, collection `sessions` with TTL policies for `createdAt` (30 days).
+- **Firestore**: Native mode, collection `sessions` with TTL policies for `createdAt` (30 days). A scheduled Cloud Scheduler job should run `npm run purge:sessions` (see `backend/src/scripts/purgeSessions.ts`) daily to guarantee long-lived sessions are removed even if TTL is delayed.
 - **Cloud Storage**: Bucket `see-it-uploads` with public access via Cloud CDN fronting `cdn.seeit.app`.
   - Lifecycle rule: delete objects after 30 days.
   - CORS: allow `POST`/`GET` from storefront domains.
+  - Automation: `npm run buckets:apply` (wrapper around the snippets in `docs/snippets/`) applies lifecycle + CORS rules based on `ALLOWED_ORIGINS`/`STOREFRONT_ORIGINS`.
 - **Cloud CDN**: Enabled on bucket backend, caching generated previews with cache-busting query.
 - **Cloud Run**: Deploy `see-it-backend` service with minimum 1 instance, CPU always allocated.
   - Env vars from `backend/env.sample`.
@@ -25,14 +26,15 @@ Vercel / Frontend
 CI/CD
 -----
 - GitHub Actions workflows:
-  - Lint + Type check for `frontend` and `backend`.
-  - Deploy backend with `gcloud` CLI on tagged releases.
-  - Deploy frontend via Vercel preview/production promotions.
+  - `.github/workflows/ci.yml` runs lint + build for both `frontend` and `backend` on every push and pull request.
+  - `.github/workflows/deploy.yml` promotes the backend to Cloud Run (using `GCP_SERVICE_ACCOUNT_KEY`, `GCP_PROJECT_ID`, and optional `CLOUD_RUN_DEPLOY_FLAGS` secrets) and triggers a Vercel production/preview deployment (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`).
+  - Repository variables `CLOUD_RUN_SERVICE` / `CLOUD_RUN_REGION` default to `see-it-backend` / `us-central1` but can be overridden if future environments diverge.
 
 Observability
 -------------
 - Cloud Logging sinks to BigQuery for `/generate-preview` metrics.
 - Error alerts via Cloud Monitoring policies (5xx spikes, latency).
+- Frontend analytics feed GA4 and Segment when `NEXT_PUBLIC_GA4_MEASUREMENT_ID` / `NEXT_PUBLIC_SEGMENT_WRITE_KEY` are populated; see `docs/analytics.md`.
 
 Provisioning Checklist
 ----------------------

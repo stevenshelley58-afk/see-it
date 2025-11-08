@@ -495,3 +495,260 @@ button {
   cursor: pointer;
   font-size: 18px;
 }
+
+.admin-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.admin-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.admin-header h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.admin-header p {
+  margin: 0;
+  max-width: 640px;
+  line-height: 1.5;
+}
+
+.admin-header code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+
+.admin-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-refresh {
+  min-width: 120px;
+  height: 48px;
+}
+
+.admin-alert {
+  background: rgba(52, 211, 153, 0.16);
+  border-left: 4px solid #34d399;
+  border-radius: 16px;
+  padding: 16px 20px;
+  color: #065f46;
+}
+
+.admin-alert-error {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: #ef4444;
+  color: #7f1d1d;
+}
+
+.admin-placeholder {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.admin-skeleton-card {
+  height: 320px;
+  border-radius: 24px;
+}
+
+.admin-empty {
+  text-align: center;
+  padding: 48px;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.12);
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+
+.admin-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 16px 50px rgba(15, 23, 42, 0.1);
+}
+
+.admin-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-card-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.admin-status {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9999px;
+  padding: 4px 12px;
+  text-transform: capitalize;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(31, 76, 255, 0.12);
+  color: #1f4cff;
+}
+
+.admin-status-active {
+  background: rgba(52, 211, 153, 0.16);
+  color: #047857;
+}
+
+.admin-status-draft {
+  background: rgba(249, 115, 22, 0.16);
+  color: #c2410c;
+}
+
+.admin-status-archived {
+  background: rgba(75, 85, 99, 0.16);
+  color: #374151;
+}
+
+.admin-card-thumb {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.admin-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+  gap: 12px;
+}
+
+.admin-textarea {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  border-radius: 16px;
+  padding: 16px;
+  font-size: 16px;
+  resize: vertical;
+  min-height: 120px;
+  font-family: inherit;
+  background: #f8fafc;
+}
+
+.admin-select,
+.admin-input {
+  width: 100%;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  padding: 0 14px;
+  font-size: 16px;
+  background: #ffffff;
+}
+
+.admin-input {
+  height: 48px;
+}
+
+.admin-helper {
+  margin: 0;
+  font-size: 14px;
+  color: #4b5563;
+}
+
+.admin-helper-error {
+  color: #b91c1c;
+}
+
+.admin-helper-success {
+  color: #047857;
+}
+
+.admin-preview {
+  background: #f1f5f9;
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.admin-preview img {
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+.admin-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-meta {
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.admin-pagination {
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .admin-shell {
+    padding: 32px 20px 48px;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-header-actions {
+    align-self: flex-start;
+  }
+
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+}

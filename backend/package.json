@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "purge:sessions": "tsx src/scripts/purgeSessions.ts",
+    "buckets:apply": "tsx src/scripts/applyBucketPolicies.ts"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.9.0",

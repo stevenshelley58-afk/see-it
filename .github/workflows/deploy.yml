@@ -1,0 +1,89 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment target'
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - preview
+  push:
+    tags:
+      - 'deploy-*'
+
+env:
+  CLOUD_RUN_SERVICE: see-it-backend
+  CLOUD_RUN_REGION: us-central1
+  NODE_VERSION: 20
+  DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend (Cloud Run)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run build
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure gcloud project
+        run: gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Build container image
+        run: gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}
+
+      - name: Deploy to Cloud Run
+        run: >
+          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE }}
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}
+          --region=${{ env.CLOUD_RUN_REGION }}
+          --platform=managed
+          --quiet
+          ${{ secrets.CLOUD_RUN_DEPLOY_FLAGS }}
+
+  deploy-frontend:
+    name: Deploy Frontend (Vercel)
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ENV: ${{ env.DEPLOY_ENV }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via Vercel
+        uses: vercel/action@v3
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: frontend
+          prod: ${{ env.VERCEL_ENV == 'production' }}
+

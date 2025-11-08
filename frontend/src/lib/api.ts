@@ -29,6 +29,40 @@ const productConfigSchema = z.object({
   productTitle: z.string()
 });
 
+const adminVariantSchema = z.object({
+  id: z.string(),
+  gid: z.string(),
+  title: z.string(),
+  imageUrl: z.string().url().nullable()
+});
+
+const adminProductSchema = z.object({
+  id: z.string(),
+  gid: z.string(),
+  title: z.string(),
+  status: z.string(),
+  totalVariants: z.number(),
+  prompt: z.string().nullable(),
+  promptMetafieldId: z.string().nullable(),
+  imageUrl: z.string().url().nullable(),
+  imageMetafieldId: z.string().nullable(),
+  featuredImageUrl: z.string().url().nullable(),
+  variants: z.array(adminVariantSchema)
+});
+
+const adminProductListSchema = z.object({
+  products: z.array(adminProductSchema),
+  pageInfo: z.object({
+    hasNextPage: z.boolean(),
+    endCursor: z.string().nullable()
+  })
+});
+
+const adminMetafieldUpdateSchema = z.object({
+  promptMetafieldId: z.string().nullable(),
+  imageMetafieldId: z.string().nullable()
+});
+
 function randomItem<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -176,6 +210,99 @@ export async function fetchProductConfig(params: { productId: string; variantId?
 
   return productConfigSchema.parse(await res.json());
 }
+
+export async function fetchAdminProducts(params: { after?: string; limit?: number; authToken?: string } = {}) {
+  if (mockApiEnabled) {
+    await wait(150);
+    return adminProductListSchema.parse({
+      products: [
+        {
+          id: '1234567890',
+          gid: 'gid://shopify/Product/1234567890',
+          title: 'Mock Sofa',
+          status: 'ACTIVE',
+          totalVariants: 2,
+          prompt: 'A modern living room scene featuring the sofa with cozy lighting and neutral walls',
+          promptMetafieldId: null,
+          imageUrl: mockPreviewPlaceholders[0],
+          imageMetafieldId: null,
+          featuredImageUrl: mockPreviewPlaceholders[1],
+          variants: [
+            {
+              id: '1234567890',
+              gid: 'gid://shopify/ProductVariant/1234567890',
+              title: 'Default Title',
+              imageUrl: mockPreviewPlaceholders[2]
+            }
+          ]
+        }
+      ],
+      pageInfo: {
+        hasNextPage: false,
+        endCursor: null
+      }
+    });
+  }
+
+  const url = new URL(`${backendBaseUrl}/admin/products`);
+  if (params.after) {
+    url.searchParams.set('after', params.after);
+  }
+  if (params.limit) {
+    url.searchParams.set('limit', String(params.limit));
+  }
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: params.authToken ? { Authorization: `Bearer ${params.authToken}` } : undefined
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to load admin products (${res.status})`);
+  }
+
+  return adminProductListSchema.parse(await res.json());
+}
+
+export async function updateAdminProductMetafields(params: {
+  productId: string;
+  prompt: string;
+  promptMetafieldId?: string | null;
+  imageUrl?: string | null;
+  imageMetafieldId?: string | null;
+  authToken?: string;
+}) {
+  if (mockApiEnabled) {
+    await wait(200);
+    return adminMetafieldUpdateSchema.parse({
+      promptMetafieldId: params.promptMetafieldId ?? 'mock-prompt',
+      imageMetafieldId: params.imageMetafieldId ?? (params.imageUrl ? 'mock-image' : null)
+    });
+  }
+
+  const { authToken, ...body } = params;
+  const res = await fetch(`${backendBaseUrl}/admin/products/${params.productId}/metafields`, {
+    method: 'PUT',
+    headers: buildJsonHeaders(authToken),
+    body: JSON.stringify({
+      prompt: body.prompt,
+      promptMetafieldId: body.promptMetafieldId ?? undefined,
+      imageUrl: body.imageUrl ?? undefined,
+      imageMetafieldId: body.imageMetafieldId ?? undefined
+    })
+  });
+
+  if (!res.ok) {
+    const message = await res.text();
+    throw new Error(message || `Failed to update metafields (${res.status})`);
+  }
+
+  const json = await res.json();
+  return adminMetafieldUpdateSchema.parse(json);
+}
+
+export type AdminProduct = z.infer<typeof adminProductSchema>;
+export type AdminProductVariant = z.infer<typeof adminVariantSchema>;
 
 function buildJsonHeaders(authToken?: string): HeadersInit {
   const headers: Record<string, string> = {

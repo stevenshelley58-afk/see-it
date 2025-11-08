@@ -7,17 +7,19 @@ Context Snapshot
 - **Frontend builds**: `npm run lint` & `npm run build` (Nov 8 2025) – see Vercel deployment artifacts referenced in `docs/phase-1-deployment.md`.
 - **Backend build**: `npm run build` (tsc) confirming Express server compiles with new auth middleware.
 
+Phase 3 Deliverables
+--------------------
+- **Merchant admin console** – `frontend/src/app/admin/page.tsx` paired with `backend/src/routes/adminProducts.ts` surfaces prompts/images, supports multi-store JWT validation, and writes metafields through Shopify GraphQL.
+- **Analytics wiring** – GA4 + Segment destinations load automatically when `NEXT_PUBLIC_GA4_MEASUREMENT_ID` / `NEXT_PUBLIC_SEGMENT_WRITE_KEY` are set; `frontend/src/components/AnalyticsBridge.tsx` forwards every `seeit_*` event.
+- **Operational automation** – `npm run purge:sessions` (Firestore cleanup), `npm run buckets:apply` (CORS + lifecycle), and enhanced CORS allow-list via `SHOPIFY_ALLOWED_SHOPS` and `STOREFRONT_ORIGINS`.
+- **CI/CD pipelines** – `.github/workflows/ci.yml` for lint/build gates and `.github/workflows/deploy.yml` for Cloud Run + Vercel promotion (requires repo secrets documented in `docs/infrastructure.md`).
+
 What Remains Open
 -----------------
-- **Merchant admin tooling**: Build the UI/workflows to review, edit, and publish `see_it_prompt` / `see_it_image` metafields. Requires write access to Admin API and preview sandboxing per `docs/requirements.md`.
-- **Observability follow-through**:
-  - Push `window.dataLayer` events into GA4/Segment (current implementation populates the data layer only).
-  - Configure Cloud Logging sinks + alerting described in `docs/analytics.md`.
-- **Operational polish**:
-  - Automate Firestore session purge (>30 days) via scheduled job or TTL.
-  - Confirm GCS lifecycle rules + CDN invalidation automation (scripts live in `docs/snippets/`).
-  - Expand CORS origin allow-list sync for multi-store installs if Phase 3 expands scope.
-- **Deployment pipelines**: Stand up CI workflows for lint/build/test + Cloud Run/Vercel promotion (currently manual).
+- **Preview sandboxing**: Provide a fixture-based preview runner inside the admin console so merchants can trigger a low-cost sample blend before publishing prompts.
+- **Analytics dashboards**: Stand up GA4 funnel and Looker Studio reports consuming the new event streams (schema captured in `docs/analytics.md`).
+- **Cloud Monitoring**: Finalize alerting policies for Vertex AI latency spikes and Postmark delivery failures (config templates still outstanding).
+- **CDN invalidation**: Scripted integration for Cloud CDN cache busting after hero image updates (current workflow documents the manual `gcloud compute url-maps invalidate-cdn-cache` call).
 
 Inputs for External Agent
 -------------------------

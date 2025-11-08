@@ -10,16 +10,40 @@ import { registerUploadRoute } from './routes/uploads.js';
 import { registerSendEmailRoute } from './routes/sendEmail.js';
 import { shopifySessionMiddleware } from './middleware/shopifyAuth.js';
 import { registerProductConfigRoute } from './routes/productConfig.js';
+import { registerAdminProductsRoute } from './routes/adminProducts.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
-const shopDomain = process.env.SHOPIFY_SHOP;
-const configuredOrigins =
-  process.env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? [];
-const impliedShopOrigin =
-  shopDomain && !shopDomain.startsWith('https://') ? `https://${shopDomain}` : shopDomain;
+
+function parseList(value: string | undefined) {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function normalizeOrigin(value: string) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, '');
+}
+
+const configuredOrigins = parseList(process.env.ALLOWED_ORIGINS).map(normalizeOrigin);
+const shopDomainOrigins = Array.from(
+  new Set(parseList(process.env.SHOPIFY_SHOP).concat(parseList(process.env.SHOPIFY_ALLOWED_SHOPS)))
+)
+  .map(normalizeOrigin)
+  .filter((origin): origin is string => Boolean(origin));
+
 const allowedOrigins = Array.from(
-  new Set(configuredOrigins.concat(impliedShopOrigin ? [impliedShopOrigin] : []))
-).filter(Boolean);
+  new Set(
+    configuredOrigins
+      .concat(shopDomainOrigins)
+      .filter((origin): origin is string => typeof origin === 'string')
+  )
+);
 
 export function createApp() {
   const app = express();
@@ -59,6 +83,7 @@ export function createApp() {
   registerUploadRoute(app);
   registerSendEmailRoute(app);
   registerProductConfigRoute(app);
+  registerAdminProductsRoute(app);
 
   return app;
 }

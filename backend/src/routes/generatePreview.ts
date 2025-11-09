@@ -29,13 +29,14 @@ export function registerGeneratePreviewRoute(app: Express) {
 
     const { roomImageGcsUrl, productId, placement, sessionId, variantId, locale } = parsed.data;
 
+    const shopOrigin = req.shopifySession?.shopOrigin ?? null;
     try {
       const productConfig = await shopify.fetchProductConfig(productId, variantId);
       await firestore.ensureSession(sessionId, {
         productId,
         variantId,
         productTitle: productConfig.productTitle,
-        shopOrigin: req.shopifySession?.shopOrigin ?? null,
+        shopOrigin,
         locale: locale ?? null
       });
 
@@ -46,6 +47,15 @@ export function registerGeneratePreviewRoute(app: Express) {
       });
 
       await firestore.appendGeneratedImage(sessionId, generatedUrl);
+      await firestore.recordActivity({
+        type: 'preview_generated',
+        sessionId,
+        productId,
+        productTitle: productConfig.productTitle,
+        shopOrigin,
+        previewUrl: generatedUrl,
+        status: 'complete'
+      });
 
       res.status(202).json({
         status: 'complete',
@@ -54,6 +64,16 @@ export function registerGeneratePreviewRoute(app: Express) {
       });
     } catch (error) {
       logger.error({ err: error }, 'Failed to generate preview');
+      await firestore.recordActivity({
+        type: 'preview_failed',
+        sessionId,
+        productId,
+        shopOrigin,
+        status: 'error',
+        metadata: {
+          reason: (error as Error)?.message ?? 'unknown'
+        }
+      });
       res.status(500).json({ error: 'Failed to generate preview' });
     }
   });

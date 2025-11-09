@@ -63,6 +63,40 @@ const adminMetafieldUpdateSchema = z.object({
   imageMetafieldId: z.string().nullable()
 });
 
+const sandboxTemplateSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  thumbnailUrl: z.string().url().optional()
+});
+
+const sandboxTemplateListSchema = z.object({
+  templates: z.array(sandboxTemplateSchema)
+});
+
+const sandboxRunResponseSchema = z.object({
+  previewUrl: z.string().url(),
+  templateId: z.string(),
+  remaining: z.number()
+});
+
+const adminActivityItemSchema = z.object({
+  id: z.string().optional(),
+  type: z.string(),
+  sessionId: z.string().nullable(),
+  productId: z.string().nullable(),
+  productTitle: z.string().nullable(),
+  shopOrigin: z.string().nullable(),
+  previewUrl: z.string().nullable(),
+  status: z.string().nullable(),
+  metadata: z.record(z.unknown()).nullable(),
+  createdAt: z.string().nullable()
+});
+
+const adminActivityResponseSchema = z.object({
+  activity: z.array(adminActivityItemSchema)
+});
+
 function randomItem<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -303,6 +337,105 @@ export async function updateAdminProductMetafields(params: {
 
 export type AdminProduct = z.infer<typeof adminProductSchema>;
 export type AdminProductVariant = z.infer<typeof adminVariantSchema>;
+export type AdminSandboxTemplate = z.infer<typeof sandboxTemplateSchema>;
+export type AdminActivityItem = z.infer<typeof adminActivityItemSchema>;
+
+export async function fetchSandboxTemplates(params: { authToken?: string } = {}) {
+  if (mockApiEnabled) {
+    return sandboxTemplateListSchema.parse({
+      templates: [
+        {
+          id: 'demo',
+          label: 'Demo Room',
+          description: 'A sample living room for testing prompts.',
+          thumbnailUrl: mockPreviewPlaceholders[0]
+        }
+      ]
+    });
+  }
+
+  const res = await fetch(`${backendBaseUrl}/admin/preview-sandbox/templates`, {
+    method: 'GET',
+    headers: params.authToken ? { Authorization: `Bearer ${params.authToken}` } : undefined
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to load sandbox templates (${res.status})`);
+  }
+
+  const json = await res.json();
+  return sandboxTemplateListSchema.parse(json);
+}
+
+export async function runSandboxPreview(params: {
+  productId: string;
+  templateId: string;
+  promptOverride?: string;
+  variantId?: string;
+  authToken?: string;
+}) {
+  if (mockApiEnabled) {
+    await wait(400);
+    return sandboxRunResponseSchema.parse({
+      previewUrl: randomItem(mockPreviewPlaceholders),
+      templateId: params.templateId,
+      remaining: 10
+    });
+  }
+
+  const { authToken, ...body } = params;
+  const res = await fetch(`${backendBaseUrl}/admin/preview-sandbox/run`, {
+    method: 'POST',
+    headers: buildJsonHeaders(authToken),
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(errorBody || `Failed to run sandbox preview (${res.status})`);
+  }
+
+  const json = await res.json();
+  return sandboxRunResponseSchema.parse(json);
+}
+
+export async function fetchAdminActivity(params: { limit?: number; authToken?: string } = {}) {
+  if (mockApiEnabled) {
+    return adminActivityResponseSchema.parse({
+      activity: [
+        {
+          id: 'mock',
+          type: 'sandbox_preview',
+          sessionId: null,
+          productId: '123',
+          productTitle: 'Mock Product',
+          shopOrigin: 'mock.shopify.com',
+          previewUrl: mockPreviewPlaceholders[1],
+          status: 'complete',
+          metadata: { templateId: 'demo' },
+          createdAt: new Date().toISOString()
+        }
+      ]
+    });
+  }
+
+  const url = new URL(`${backendBaseUrl}/admin/activity`);
+  if (params.limit) {
+    url.searchParams.set('limit', String(params.limit));
+  }
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: params.authToken ? { Authorization: `Bearer ${params.authToken}` } : undefined
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to load admin activity (${res.status})`);
+  }
+
+  const json = await res.json();
+  return adminActivityResponseSchema.parse(json);
+}
 
 function buildJsonHeaders(authToken?: string): HeadersInit {
   const headers: Record<string, string> = {

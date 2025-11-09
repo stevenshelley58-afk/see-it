@@ -37,6 +37,14 @@ Technical Inputs
   - Lint/build → `.github/workflows/ci.yml`
   - Deploy → `.github/workflows/deploy.yml` (requires repo secrets `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_KEY`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, optional `CLOUD_RUN_DEPLOY_FLAGS`).
 
+Implementation Updates (Nov 2025)
+---------------------------------
+- Preview sandbox is now live in the admin console. New endpoints `/admin/preview-sandbox/templates` and `/admin/preview-sandbox/run` reuse `generatePreviewImage` while enforcing per-merchant quotas (default `SANDBOX_DAILY_LIMIT=15`). Optional `SANDBOX_ROOM_TEMPLATES` allows overriding the built-in fixtures.
+- Firestore tracks sandbox usage (`sandboxUsage` collection) and merchant activity (`activity` collection). The admin UI surfaces a timeline card powered by `/admin/activity`, capturing preview generations, sandbox runs, failures, and email sends.
+- Frontend `ProductCard` embeds sandbox controls (template picker, quota indicator, preview gallery) and refreshes the activity feed after each run to streamline QA workflows.
+- `backend/env.sample` documents the new environment variables; Cloud Scheduler should call `npm run buckets:apply` weekly to reassert bucket policies alongside the existing session purge.
+- Deployment checklists should verify Cloud Monitoring alerts cover Vertex latency/error spikes and Postmark failure rates now that activity emits richer telemetry.
+
 Environment & Secrets
 ---------------------
 - Reuse the secrets catalogued in `docs/infrastructure.md`. No new scopes are required, but ensure GA4 and Segment credentials are stored in Vercel + Shopify admin `.env` files.

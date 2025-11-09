@@ -42,6 +42,17 @@ export function registerSendEmailRoute(app: Express) {
     }
 
     await firestore.saveEmail(sessionId, email);
+    await firestore.recordActivity({
+      type: 'email_sent',
+      sessionId,
+      productId: session.productId,
+      productTitle: session.productTitle ?? null,
+      shopOrigin: session.shopOrigin ?? null,
+      status: 'sent',
+      metadata: {
+        email
+      }
+    });
 
     res.status(200).json({ status: 'sent' });
   });

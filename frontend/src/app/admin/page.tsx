@@ -5,8 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   fetchAdminProducts,
+  fetchAdminActivity,
+  fetchSandboxTemplates,
+  runSandboxPreview,
   updateAdminProductMetafields,
-  type AdminProduct
+  type AdminProduct,
+  type AdminSandboxTemplate,
+  type AdminActivityItem
 } from '../../lib/api';
 import { fetchSessionToken } from '../../lib/shopifyBridge';
 
@@ -25,6 +30,12 @@ export default function AdminMetafieldsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [tokenRefreshing, setTokenRefreshing] = useState(false);
+  const [sandboxTemplates, setSandboxTemplates] = useState<AdminSandboxTemplate[]>([]);
+  const [sandboxTemplatesLoading, setSandboxTemplatesLoading] = useState(false);
+  const [sandboxTemplatesError, setSandboxTemplatesError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<AdminActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
 
   const refreshToken = useCallback(async () => {
     setTokenRefreshing(true);
@@ -36,6 +47,13 @@ export default function AdminMetafieldsPage() {
       setTokenRefreshing(false);
     }
   }, []);
+
+  const resolveAuthToken = useCallback(async () => {
+    if (authToken) {
+      return authToken;
+    }
+    return await refreshToken();
+  }, [authToken, refreshToken]);
 
   const loadProducts = useCallback(
     async (options: { after?: string | null; append?: boolean } = {}) => {
@@ -61,9 +79,54 @@ export default function AdminMetafieldsPage() {
     [authToken, refreshToken]
   );
 
+  const loadSandboxTemplates = useCallback(async () => {
+    if (sandboxTemplatesLoading) {
+      return;
+    }
+    setSandboxTemplatesError(null);
+    setSandboxTemplatesLoading(true);
+    try {
+      const token = await resolveAuthToken();
+      if (!token) {
+        throw new Error('Missing Shopify session token');
+      }
+      const response = await fetchSandboxTemplates({ authToken: token });
+      setSandboxTemplates(response.templates);
+    } catch (err) {
+      setSandboxTemplatesError(
+        (err as Error)?.message ?? 'Unable to load sandbox templates right now.'
+      );
+    } finally {
+      setSandboxTemplatesLoading(false);
+    }
+  }, [resolveAuthToken, sandboxTemplatesLoading]);
+
+  const loadActivity = useCallback(async () => {
+    setActivityError(null);
+    setActivityLoading(true);
+    try {
+      const token = await resolveAuthToken();
+      if (!token) {
+        throw new Error('Missing Shopify session token');
+      }
+      const response = await fetchAdminActivity({ authToken: token, limit: 25 });
+      setActivity(response.activity);
+    } catch (err) {
+      setActivityError((err as Error)?.message ?? 'Unable to load recent activity.');
+    } finally {
+      setActivityLoading(false);
+    }
+  }, [resolveAuthToken]);
+
   useEffect(() => {
     void loadProducts();
   }, [loadProducts]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    void loadSandboxTemplates();
+    void loadActivity();
+  }, [authToken, loadActivity, loadSandboxTemplates]);
 
   const handleLoadMore = useCallback(() => {
     if (!pageInfo.hasNextPage || loadingMore) return;
@@ -112,6 +175,11 @@ export default function AdminMetafieldsPage() {
           {error}
         </div>
       )}
+      {sandboxTemplatesError && (
+        <div className="admin-alert admin-alert-warning" role="status">
+          {sandboxTemplatesError}
+        </div>
+      )}
       {loading && (
         <div className="admin-placeholder">
           <div className="skeleton admin-skeleton-card" aria-hidden="true" />
@@ -125,6 +193,14 @@ export default function AdminMetafieldsPage() {
           <p>Add products to your Shopify catalog, then refresh this page.</p>
         </div>
       )}
+      {authToken && (
+        <ActivityTimeline
+          items={activity}
+          loading={activityLoading}
+          error={activityError}
+          onRefresh={() => void loadActivity()}
+        />
+      )}
       {!loading && products.length > 0 && (
         <section className="admin-grid">
           {products.map((product) => (
@@ -133,6 +209,10 @@ export default function AdminMetafieldsPage() {
               product={product}
               authToken={authToken}
               onSaved={handleProductSaved}
+              sandboxTemplates={sandboxTemplates}
+              sandboxTemplatesLoading={sandboxTemplatesLoading}
+              resolveAuthToken={resolveAuthToken}
+              onRefreshActivity={() => void loadActivity()}
             />
           ))}
         </section>
@@ -156,10 +236,22 @@ export default function AdminMetafieldsPage() {
 type ProductCardProps = {
   product: AdminProduct;
   authToken: string | null;
+  sandboxTemplates: AdminSandboxTemplate[];
+  sandboxTemplatesLoading: boolean;
+  resolveAuthToken: () => Promise<string | null>;
   onSaved: (productId: string, updates: Partial<AdminProduct>) => void;
+  onRefreshActivity: () => void;
 };
 
-function ProductCard({ product, authToken, onSaved }: ProductCardProps) {
+function ProductCard({
+  product,
+  authToken,
+  sandboxTemplates,
+  sandboxTemplatesLoading,
+  resolveAuthToken,
+  onSaved,
+  onRefreshActivity
+}: ProductCardProps) {
   const [prompt, setPrompt] = useState(product.prompt ?? '');
   const [imageSelection, setImageSelection] = useState<'none' | 'preset' | 'custom'>('none');
   const [presetUrl, setPresetUrl] = useState<string | null>(null);
@@ -167,6 +259,11 @@ function ProductCard({ product, authToken, onSaved }: ProductCardProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [sandboxTemplateId, setSandboxTemplateId] = useState<string | null>(null);
+  const [sandboxPreviewUrl, setSandboxPreviewUrl] = useState<string | null>(null);
+  const [sandboxRemaining, setSandboxRemaining] = useState<number | null>(null);
+  const [sandboxRunning, setSandboxRunning] = useState(false);
+  const [sandboxError, setSandboxError] = useState<string | null>(null);
 
   useEffect(() => {
     setPrompt(product.prompt ?? '');
@@ -189,7 +286,28 @@ function ProductCard({ product, authToken, onSaved }: ProductCardProps) {
     }
     setSaveError(null);
     setSavedAt(null);
+    setSandboxPreviewUrl(null);
+    setSandboxRemaining(null);
+    setSandboxError(null);
+    setSandboxRunning(false);
   }, [product]);
+
+  useEffect(() => {
+    if (!sandboxTemplates.length) {
+      setSandboxTemplateId(null);
+      return;
+    }
+    setSandboxTemplateId((prev) =>
+      prev && sandboxTemplates.some((template) => template.id === prev)
+        ? prev
+        : sandboxTemplates[0]?.id ?? null
+    );
+  }, [sandboxTemplates]);
+
+  useEffect(() => {
+    setSandboxError(null);
+    setSandboxPreviewUrl(null);
+  }, [sandboxTemplateId]);
 
   const imageOptions = useMemo(() => buildImageOptions(product), [product]);
 
@@ -204,6 +322,11 @@ function ProductCard({ product, authToken, onSaved }: ProductCardProps) {
     return null;
   }, [customImageUrl, imageSelection, presetUrl]);
 
+  const selectedSandboxTemplate = useMemo(
+    () => sandboxTemplates.find((template) => template.id === sandboxTemplateId) ?? null,
+    [sandboxTemplateId, sandboxTemplates]
+  );
+
   const promptCharactersUsed = prompt.length;
   const promptIsValid = prompt.trim().length > 0 && promptCharactersUsed <= PROMPT_LIMIT;
   const customImageIsValid =
@@ -215,6 +338,45 @@ function ProductCard({ product, authToken, onSaved }: ProductCardProps) {
     (currentImageUrl ?? null) !== (product.imageUrl ?? null);
 
   const canSave = promptIsValid && customImageIsValid && hasChanges && !saving;
+
+  const handleSandboxRun = useCallback(async () => {
+    if (!sandboxTemplateId || sandboxTemplatesLoading) {
+      return;
+    }
+    if (!promptIsValid) {
+      setSandboxError('Enter a prompt before running the sandbox.');
+      return;
+    }
+    setSandboxRunning(true);
+    setSandboxError(null);
+    try {
+      const token = await resolveAuthToken();
+      if (!token) {
+        throw new Error('Missing Shopify session token');
+      }
+      const response = await runSandboxPreview({
+        productId: product.id,
+        templateId: sandboxTemplateId,
+        promptOverride: prompt.trim(),
+        authToken: token
+      });
+      setSandboxPreviewUrl(response.previewUrl);
+      setSandboxRemaining(response.remaining);
+      void onRefreshActivity();
+    } catch (err) {
+      setSandboxError((err as Error)?.message ?? 'Unable to run sandbox preview.');
+    } finally {
+      setSandboxRunning(false);
+    }
+  }, [
+    sandboxTemplateId,
+    sandboxTemplatesLoading,
+    promptIsValid,
+    resolveAuthToken,
+    product.id,
+    prompt,
+    onRefreshActivity
+  ]);
 
   const handleSelectionChange = (value: string) => {
     if (value === 'custom') {
@@ -365,6 +527,92 @@ function ProductCard({ product, authToken, onSaved }: ProductCardProps) {
           </button>
         </div>
       </form>
+      <section className="admin-sandbox">
+        <div className="admin-sandbox-header">
+          <h3>Preview sandbox</h3>
+          {sandboxTemplatesLoading && <span className="admin-pill">Loading…</span>}
+        </div>
+        <p className="admin-helper">
+          Generate a sample preview using staged room templates. This does not impact your live
+          storefront.
+        </p>
+        {sandboxTemplatesLoading && sandboxTemplates.length === 0 && (
+          <div className="skeleton admin-sandbox-skeleton" aria-hidden="true" />
+        )}
+        {!sandboxTemplatesLoading && sandboxTemplates.length === 0 && (
+          <p className="admin-helper">Add sandbox templates to enable quick previewing.</p>
+        )}
+        {sandboxTemplates.length > 0 && (
+          <>
+            <label>
+              <span className="admin-label">Template</span>
+              <select
+                className="admin-select"
+                value={sandboxTemplateId ?? ''}
+                onChange={(event) => setSandboxTemplateId(event.target.value || null)}
+              >
+                {sandboxTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedSandboxTemplate?.description && (
+              <p className="admin-helper">{selectedSandboxTemplate.description}</p>
+            )}
+            {selectedSandboxTemplate?.thumbnailUrl && (
+              <div className="admin-sandbox-thumbnail">
+                <NextImage
+                  src={selectedSandboxTemplate.thumbnailUrl}
+                  alt={`${selectedSandboxTemplate.label} preview`}
+                  width={180}
+                  height={120}
+                />
+              </div>
+            )}
+            <div className="admin-sandbox-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void handleSandboxRun()}
+                disabled={sandboxRunning || sandboxTemplatesLoading || !sandboxTemplateId}
+              >
+                {sandboxRunning ? 'Generating…' : 'Run sandbox preview'}
+              </button>
+              {typeof sandboxRemaining === 'number' && (
+                <small className="admin-meta">
+                  Remaining today: {Math.max(0, sandboxRemaining)}
+                </small>
+              )}
+            </div>
+            {sandboxError && (
+              <p className="admin-helper admin-helper-error" role="alert">
+                {sandboxError}
+              </p>
+            )}
+            {sandboxPreviewUrl && (
+              <div className="admin-sandbox-preview">
+                <NextImage
+                  src={sandboxPreviewUrl}
+                  alt="Sandbox preview result"
+                  width={240}
+                  height={240}
+                  className="admin-sandbox-preview-image"
+                />
+                <a
+                  href={sandboxPreviewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="admin-link"
+                >
+                  Open full preview
+                </a>
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </article>
   );
 }
@@ -391,6 +639,124 @@ function isValidUrl(value: string) {
     return url.protocol === 'https:' || url.protocol === 'http:';
   } catch {
     return false;
+  }
+}
+
+type ActivityTimelineProps = {
+  items: AdminActivityItem[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+};
+
+function ActivityTimeline({ items, loading, error, onRefresh }: ActivityTimelineProps) {
+  const hasItems = items.length > 0;
+  return (
+    <section className="admin-activity">
+      <article className="admin-card admin-activity-card">
+        <header className="admin-card-header">
+          <div>
+            <h2>Activity timeline</h2>
+            <p>Recent previews, sandbox runs, and emails for your store.</p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            onClick={() => void onRefresh()}
+            disabled={loading}
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </header>
+        {error && (
+          <p className="admin-helper admin-helper-error" role="alert">
+            {error}
+          </p>
+        )}
+        {loading && (
+          <div className="skeleton admin-skeleton-activity" aria-hidden="true">
+            &nbsp;
+          </div>
+        )}
+        {!loading && !error && !hasItems && (
+          <p className="admin-helper">Run a sandbox preview or publish updates to see history.</p>
+        )}
+        {hasItems && (
+          <ul className="admin-activity-list">
+            {items.map((item, index) => {
+              const templateId =
+                item.metadata &&
+                typeof item.metadata === 'object' &&
+                item.metadata !== null &&
+                'templateId' in item.metadata
+                  ? String((item.metadata as Record<string, unknown>).templateId ?? '')
+                  : null;
+              return (
+                <li key={item.id ?? `${item.type}-${item.createdAt ?? index}`}>
+                  <div className="admin-activity-row">
+                    <span className="admin-activity-type">{formatActivityType(item.type)}</span>
+                    <span className="admin-activity-time">
+                      {formatActivityTimestamp(item.createdAt)}
+                    </span>
+                  </div>
+                  {item.productTitle && (
+                    <p className="admin-meta">
+                      {item.productTitle}
+                      {templateId ? ` · Template ${templateId}` : ''}
+                    </p>
+                  )}
+                  {!item.productTitle && templateId && (
+                    <p className="admin-meta">Template {templateId}</p>
+                  )}
+                  {item.previewUrl && (
+                    <a
+                      href={item.previewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="admin-link"
+                    >
+                      View preview
+                    </a>
+                  )}
+                  {item.status && (
+                    <p className="admin-meta admin-activity-status">Status: {item.status}</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </article>
+    </section>
+  );
+}
+
+function formatActivityTimestamp(timestamp: string | null) {
+  if (!timestamp) return '—';
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return timestamp;
+  }
+  return parsed.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatActivityType(type: string | undefined) {
+  switch (type) {
+    case 'sandbox_preview':
+      return 'Sandbox preview';
+    case 'preview_generated':
+      return 'Preview generated';
+    case 'preview_failed':
+      return 'Preview failed';
+    case 'email_sent':
+      return 'Email sent';
+    default:
+      return type ?? 'Event';
   }
 }
 

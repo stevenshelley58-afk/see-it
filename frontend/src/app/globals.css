@@ -729,6 +729,145 @@ button {
   color: #4b5563;
 }
 
+.admin-alert-warning {
+  background: rgba(251, 191, 36, 0.18);
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.admin-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.08);
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.admin-link {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-link:hover {
+  text-decoration: underline;
+}
+
+.admin-sandbox {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-sandbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-sandbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-sandbox-thumbnail {
+  width: 180px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.admin-sandbox-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-sandbox-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.admin-sandbox-preview-image {
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+.admin-sandbox-skeleton {
+  height: 160px;
+  border-radius: 20px;
+}
+
+.admin-sandbox .admin-select {
+  max-width: 320px;
+}
+
+.admin-activity {
+  width: 100%;
+}
+
+.admin-activity-card {
+  gap: 12px;
+}
+
+.admin-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-activity-list li {
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-activity-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-activity-type {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.admin-activity-time {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.admin-activity-status {
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.admin-skeleton-activity {
+  height: 72px;
+  border-radius: 18px;
+}
+
 .admin-pagination {
   display: flex;
   justify-content: center;

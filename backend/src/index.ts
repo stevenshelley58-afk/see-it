@@ -11,6 +11,8 @@ import { registerSendEmailRoute } from './routes/sendEmail.js';
 import { shopifySessionMiddleware } from './middleware/shopifyAuth.js';
 import { registerProductConfigRoute } from './routes/productConfig.js';
 import { registerAdminProductsRoute } from './routes/adminProducts.js';
+import { registerAdminPreviewSandboxRoute } from './routes/adminPreviewSandbox.js';
+import { registerAdminActivityRoute } from './routes/adminActivity.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 
@@ -84,6 +86,8 @@ export function createApp() {
   registerSendEmailRoute(app);
   registerProductConfigRoute(app);
   registerAdminProductsRoute(app);
+  registerAdminPreviewSandboxRoute(app);
+  registerAdminActivityRoute(app);
 
   return app;
 }

@@ -11,6 +11,8 @@ const db = new Firestore(
 );
 
 const sessionsCollection = db.collection('sessions');
+const activityCollection = db.collection('activity');
+const sandboxUsageCollection = db.collection('sandboxUsage');
 
 type SessionInit = {
   productId: string;
@@ -71,6 +73,55 @@ export const firestore = {
       return null;
     }
     return snapshot.data();
+  },
+
+  async recordActivity(event: {
+    type: 'preview_generated' | 'preview_failed' | 'email_sent' | 'sandbox_preview';
+    sessionId?: string | null;
+    productId?: string | null;
+    productTitle?: string | null;
+    shopOrigin?: string | null;
+    previewUrl?: string | null;
+    status?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    await activityCollection.add({
+      ...event,
+      createdAt: new Date()
+    });
+  },
+
+  async listRecentActivity(params: { shopOrigin: string; limit?: number }) {
+    const query = activityCollection
+      .where('shopOrigin', '==', params.shopOrigin)
+      .orderBy('createdAt', 'desc')
+      .limit(Math.max(1, Math.min(params.limit ?? 25, 50)));
+    const snapshot = await query.get();
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }));
+  },
+
+  async getSandboxUsage(shopOrigin: string, dateKey: string) {
+    const ref = sandboxUsageCollection.doc(`${shopOrigin}#${dateKey}`);
+    const snapshot = await ref.get();
+    if (!snapshot.exists) {
+      return { count: 0 };
+    }
+    const data = snapshot.data();
+    const count = typeof data?.count === 'number' ? data.count : 0;
+    return { count };
+  },
+
+  async incrementSandboxUsage(shopOrigin: string, dateKey: string) {
+    const ref = sandboxUsageCollection.doc(`${shopOrigin}#${dateKey}`);
+    await ref.set(
+      {
+        shopOrigin,
+        dateKey,
+        count: FieldValue.increment(1),
+        updatedAt: new Date()
+      },
+      { merge: true }
+    );
   }
 };
 

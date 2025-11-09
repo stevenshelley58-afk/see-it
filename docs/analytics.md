@@ -24,6 +24,7 @@ Server-Side
 -----------
 - Cloud Run logs `generate-preview` success/failure with sessionId.
 - Postmark email success logged via Pino with `sessionId` and email.
+- Firestore `activity` collection records `preview_generated`, `preview_failed`, `email_sent`, and `sandbox_preview` events surfaced in the admin timeline (`/admin/activity`).
 
 Dashboards
 ----------

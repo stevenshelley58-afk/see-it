@@ -4,11 +4,11 @@ Infrastructure Blueprint
 Google Cloud
 ------------
 - **Project**: Shared with Firestore + Cloud Storage (variable `GCP_PROJECT_ID`).
-- **Firestore**: Native mode, collection `sessions` with TTL policies for `createdAt` (30 days). A scheduled Cloud Scheduler job should run `npm run purge:sessions` (see `backend/src/scripts/purgeSessions.ts`) daily to guarantee long-lived sessions are removed even if TTL is delayed.
+- **Firestore**: Native mode, collection `sessions` with TTL policies for `createdAt` (30 days). A scheduled Cloud Scheduler job should run `npm run purge:sessions` (see `backend/src/scripts/purgeSessions.ts`) daily to guarantee long-lived sessions are removed even if TTL is delayed. Sandbox quotas and telemetry live in `sandboxUsage` and `activity` collections respectively.
 - **Cloud Storage**: Bucket `see-it-uploads` with public access via Cloud CDN fronting `cdn.seeit.app`.
   - Lifecycle rule: delete objects after 30 days.
   - CORS: allow `POST`/`GET` from storefront domains.
-  - Automation: `npm run buckets:apply` (wrapper around the snippets in `docs/snippets/`) applies lifecycle + CORS rules based on `ALLOWED_ORIGINS`/`STOREFRONT_ORIGINS`.
+  - Automation: `npm run buckets:apply` (wrapper around the snippets in `docs/snippets/`) applies lifecycle + CORS rules based on `ALLOWED_ORIGINS`/`STOREFRONT_ORIGINS`. Trigger this via Cloud Scheduler (weekly) to keep CDN/lifecycle settings in sync.
 - **Cloud CDN**: Enabled on bucket backend, caching generated previews with cache-busting query.
 - **Cloud Run**: Deploy `see-it-backend` service with minimum 1 instance, CPU always allocated.
   - Env vars from `backend/env.sample`.

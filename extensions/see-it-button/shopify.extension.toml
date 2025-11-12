@@ -1,0 +1,12 @@
+# Theme App Extension Configuration
+# This makes your button available as a block in Theme Editor
+
+api_version = "2024-07"
+
+name = "see-it-button"
+type = "theme"
+
+[extension_points]
+  [extension_points.app_blocks]
+    # This makes the block available in Theme Editor
+    # Merchants can drag and drop it onto product pages

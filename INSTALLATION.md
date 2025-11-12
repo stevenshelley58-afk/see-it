@@ -2,20 +2,13 @@
 
 This guide will walk you through installing and running the See It app on your Shopify store.
 
-## Quick Start (TL;DR)
+## Overview
 
-1. **Create Shopify App** → Get API Key & Secret
-2. **Set up GCP** → Create project, Firestore, Storage bucket
-3. **Set up Postmark** → Get server token
-4. **Configure env files** → Copy `env.sample` to `.env` / `.env.local`
-5. **Install dependencies** → `npm install` in both `backend/` and `frontend/`
-6. **Run locally** → `npm run dev` in both directories
-7. **Deploy backend** → Cloud Run
-8. **Deploy frontend** → Vercel
-9. **Get Admin Token** → Create custom app in Shopify admin
-10. **Configure products** → Add metafields
+This is a **Shopify App Bridge** app with two interfaces:
+- **Admin Interface** (`/admin`) - Accessed from Shopify admin for managing product metafields
+- **Customer Modal** (`/`) - Embedded in your storefront product pages
 
-For detailed instructions, continue reading below.
+The app uses Shopify App Bridge for authentication - no OAuth flow needed. Shopify handles authentication automatically when the app is installed.
 
 ## Prerequisites
 
@@ -34,10 +27,12 @@ Before you begin, ensure you have:
 2. Click **Apps** → **Create app**
 3. Choose **Create app manually**
 4. Name your app (e.g., "See It")
-5. Set the **App URL** to your frontend URL (you'll update this after deployment)
+5. Set the **App URL** to your frontend URL (you'll update this after deployment):
+   - For now: `https://your-app.vercel.app` (or your domain)
+   - This is where Shopify will load your app in the admin
 6. Set the **Allowed redirection URL(s)** to:
-   - `https://your-frontend-domain.com/api/auth/callback`
-   - `https://your-frontend-domain.com/api/auth/shopify/callback`
+   - `https://your-app.vercel.app/admin`
+   - `https://your-app.vercel.app`
 
 ### Configure App Scopes
 
@@ -50,10 +45,10 @@ In your Shopify app settings, request these scopes:
 ### Get Your Credentials
 
 After creating the app, you'll receive:
-- **API Key** (Client ID)
-- **API Secret** (Client Secret)
+- **API Key** (Client ID) - This is your `SHOPIFY_API_KEY` / `NEXT_PUBLIC_SHOPIFY_API_KEY`
+- **API Secret** (Client Secret) - This is your `SHOPIFY_API_SECRET`
 
-Save these for later configuration.
+**Important:** You do NOT need to implement OAuth. Shopify App Bridge handles authentication automatically when merchants install your app.
 
 ## Step 2: Set Up Google Cloud Platform
 
@@ -65,15 +60,12 @@ Save these for later configuration.
 
 ### Enable Required APIs
 
-Enable these APIs in your GCP project:
-- Cloud Firestore API
-- Cloud Storage API
-- Vertex AI API
-
 ```bash
 gcloud services enable firestore.googleapis.com
 gcloud services enable storage.googleapis.com
 gcloud services enable aiplatform.googleapis.com
+gcloud services enable run.googleapis.com
+gcloud services enable compute.googleapis.com
 ```
 
 ### Create Firestore Database
@@ -81,16 +73,16 @@ gcloud services enable aiplatform.googleapis.com
 1. Go to **Firestore** in the GCP Console
 2. Click **Create database**
 3. Choose **Native mode**
-4. Select a location (e.g., `us-central`)
+4. Select a location (e.g., `nam5` for us-central)
 5. Create the database
 
 ### Create Cloud Storage Bucket
 
 ```bash
-# Replace with your bucket name
+# Replace YOUR_PROJECT_ID with your actual project ID
 gsutil mb -p YOUR_PROJECT_ID -c STANDARD -l us-central1 gs://see-it-uploads
 
-# Set lifecycle policy (optional - auto-delete after 30 days)
+# Set lifecycle policy (auto-delete after 30 days)
 gsutil lifecycle set docs/snippets/gcs-lifecycle.json gs://see-it-uploads
 
 # Set CORS policy
@@ -106,9 +98,8 @@ gsutil cors set docs/snippets/gcs-cors.json gs://see-it-uploads
 
 ### Create Service Account
 
-Create a service account for the backend:
-
 ```bash
+# Create service account
 gcloud iam service-accounts create see-it-backend \
   --display-name="See It Backend Service Account"
 
@@ -154,7 +145,7 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
    SHOPIFY_SHOP=your-store.myshopify.com
    SHOPIFY_ALLOWED_SHOPS=your-store.myshopify.com
    SHOPIFY_HOST=your-app-domain.com
-   SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_xxx  # Get this after installing the app
+   SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_xxx  # See Step 9
    SHOPIFY_SCOPES=read_products,read_product_listings
    VERTEX_LOCATION=us-central1
    VERTEX_MODEL=publishers/google/models/gemini-2.5-flash-image
@@ -227,11 +218,8 @@ The frontend will run on `http://localhost:3000`
 
 ### Test Locally
 
-1. Update `frontend/.env.local`:
-   - Set `NEXT_PUBLIC_BACKEND_URL=http://localhost:8080`
-   - Set `NEXT_PUBLIC_USE_MOCKS=true` for initial testing
-
-2. Visit `http://localhost:3000` to see the app
+1. For testing the admin interface, you'll need to access it through Shopify admin (see Step 10)
+2. For testing the customer modal, you can set `NEXT_PUBLIC_USE_MOCKS=true` in `.env.local` to test without backend
 
 ## Step 7: Deploy Backend (Cloud Run)
 
@@ -240,6 +228,18 @@ The frontend will run on `http://localhost:3000`
 ```bash
 cd backend
 gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/see-it-backend
+```
+
+### Store Secrets in Secret Manager
+
+```bash
+# Store Shopify credentials
+echo -n "your-api-key" | gcloud secrets create shopify-api-key --data-file=-
+echo -n "your-api-secret" | gcloud secrets create shopify-api-secret --data-file=-
+echo -n "shpat_xxx" | gcloud secrets create shopify-admin-token --data-file=-
+
+# Store Postmark token
+echo -n "your-postmark-token" | gcloud secrets create postmark-token --data-file=-
 ```
 
 ### Deploy to Cloud Run
@@ -253,11 +253,9 @@ gcloud run deploy see-it-backend \
   --max-instances=20 \
   --allow-unauthenticated \
   --service-account=see-it-backend@YOUR_PROJECT_ID.iam.gserviceaccount.com \
-  --set-env-vars="GCP_PROJECT_ID=YOUR_PROJECT_ID,GCS_BUCKET_NAME=see-it-uploads,VERTEX_LOCATION=us-central1" \
+  --set-env-vars="GCP_PROJECT_ID=YOUR_PROJECT_ID,GCS_BUCKET_NAME=see-it-uploads,VERTEX_LOCATION=us-central1,SHOPIFY_SHOP=your-store.myshopify.com,SHOPIFY_ALLOWED_SHOPS=your-store.myshopify.com,ALLOWED_ORIGINS=https://yourstorefront.com" \
   --set-secrets="SHOPIFY_API_KEY=shopify-api-key:latest,SHOPIFY_API_SECRET=shopify-api-secret:latest,SHOPIFY_ADMIN_ACCESS_TOKEN=shopify-admin-token:latest,POSTMARK_SERVER_TOKEN=postmark-token:latest"
 ```
-
-**Note:** Store sensitive values in Secret Manager and reference them with `--set-secrets`.
 
 After deployment, note your Cloud Run URL (e.g., `https://see-it-backend-xxx.run.app`)
 
@@ -286,21 +284,11 @@ Follow the prompts:
 
 After deployment, note your Vercel URL (e.g., `https://see-it.vercel.app`)
 
-## Step 9: Complete Shopify App Setup
+## Step 9: Get Shopify Admin Access Token
 
-### Update App URLs
+The backend needs an Admin API access token to read product data and metafields. You have two options:
 
-1. Go back to your Shopify Partner Dashboard
-2. Edit your app
-3. Update:
-   - **App URL**: `https://your-vercel-domain.com`
-   - **Allowed redirection URL(s)**: `https://your-vercel-domain.com/api/auth/callback`
-
-### Install App on Your Store
-
-There are two ways to get the Admin API Access Token:
-
-#### Option A: Custom App (Recommended for Development)
+### Option A: Custom App (Recommended for Development)
 
 1. In your Shopify admin, go to **Settings** → **Apps and sales channels**
 2. Click **Develop apps** → **Create an app**
@@ -314,31 +302,75 @@ There are two ways to get the Admin API Access Token:
 6. Click **Install app**
 7. After installation, click **API credentials** → **Reveal token once**
 8. Copy the token (starts with `shpat_`)
-9. Update your backend `.env` with `SHOPIFY_ADMIN_ACCESS_TOKEN`
+9. Update your backend `.env` and Secret Manager with `SHOPIFY_ADMIN_ACCESS_TOKEN`
 
-#### Option B: OAuth Flow (For Production)
+### Option B: Use Your App's Access Token (For Production)
 
-If you're building a public app, implement OAuth flow to get access tokens dynamically. For now, use Option A for development/testing.
+When a merchant installs your app, Shopify provides an access token via OAuth. For now, use Option A. In production, you'll need to implement OAuth to get tokens dynamically per store.
 
-### Redeploy Backend
-
-After getting the admin token, update and redeploy:
+### Update Backend Secret
 
 ```bash
-# Store token in Secret Manager (if not already created)
-echo -n "shpat_xxx" | gcloud secrets create shopify-admin-token --data-file=-
-
-# Or update existing secret
+# Update Secret Manager
 echo -n "shpat_xxx" | gcloud secrets versions add shopify-admin-token --data-file=-
 
-# Redeploy Cloud Run with updated secret
+# Redeploy Cloud Run
 gcloud run deploy see-it-backend \
   --set-secrets="SHOPIFY_ADMIN_ACCESS_TOKEN=shopify-admin-token:latest"
 ```
 
-## Step 10: Configure Product Metafields
+## Step 10: Complete Shopify App Setup
+
+### Update App URLs in Partner Dashboard
+
+1. Go back to your [Shopify Partner Dashboard](https://partners.shopify.com)
+2. Edit your app
+3. Update:
+   - **App URL**: `https://your-vercel-domain.com/admin`
+   - **Allowed redirection URL(s)**: 
+     - `https://your-vercel-domain.com/admin`
+     - `https://your-vercel-domain.com`
+
+### Install App on Your Store
+
+1. In your Shopify admin, go to **Apps** → **App and sales channel settings**
+2. Find your app in the list
+3. Click **Install** (or it may already be installed if you created it from the store)
+4. Authorize the requested scopes
+
+**Important:** When merchants install your app, Shopify automatically:
+- Provides session tokens via App Bridge
+- Handles authentication
+- No OAuth implementation needed on your end
+
+## Step 11: Access Admin Interface
+
+The admin interface is accessible at `/admin` when launched from Shopify admin:
+
+1. In your Shopify admin, go to **Apps**
+2. Click on your "See It" app
+3. Shopify will load `https://your-app-domain.com/admin?host=...`
+4. The app uses App Bridge to get session tokens automatically
+
+The admin interface lets you:
+- View all products
+- Configure `custom.see_it_prompt` and `custom.see_it_image` metafields
+- Test preview generation with sandbox templates
+- View activity timeline
+
+## Step 12: Configure Product Metafields
 
 For each product you want to use with See It:
+
+### Option A: Via Admin Interface
+
+1. Access the admin interface (Step 11)
+2. Find your product in the list
+3. Enter a prompt (describes how product should appear)
+4. Select or enter a hero image URL
+5. Click **Publish**
+
+### Option B: Via Shopify Admin
 
 1. Go to **Settings** → **Custom data** → **Products**
 2. Add metafield definitions:
@@ -347,52 +379,112 @@ For each product you want to use with See It:
    - **Key**: `see_it_prompt` (Single-line text, max 500 chars)
 
 3. For each product:
+   - Go to the product page
+   - Scroll to **Metafields** section
    - Add the product image (PNG with transparency)
    - Add a prompt describing the product placement
 
-## Step 11: Add CTA to Storefront
+## Step 13: Add CTA to Storefront
 
-### For Online Store 2.0 Themes
+The customer-facing modal needs to be embedded in your product pages. You have two options:
 
-1. Go to **Online Store** → **Themes** → **Customize**
-2. Navigate to a product page
-3. Add a **Custom HTML** or **App embed** block
-4. Add the See It button code (you'll need to create a theme app extension)
+### Option A: Theme App Extension (Recommended)
 
-### For Headless Storefronts
+Create a theme app extension that adds a button to product pages:
 
-Embed the app using Shopify App Bridge in your storefront code.
+1. Create `extensions/see-it-button/` directory in your app
+2. Add a liquid template that renders the button
+3. The button should open the modal with product context
 
-## Step 12: Test the Installation
+Example button code:
+```liquid
+<button 
+  onclick="window.open('https://your-app-domain.com?productId={{ product.id }}&variantId={{ product.selected_or_first_available_variant.id }}', 'SeeIt', 'width=420,height=800')"
+  class="see-it-button"
+>
+  See It In Your Home
+</button>
+```
 
-1. Visit a product page on your store
-2. Click the "See It In Your Home" button
-3. Test the flow:
-   - Upload/capture a room photo
-   - Crop the image
-   - Place the product
-   - Generate preview
-   - Send email
+### Option B: Manual Integration
+
+Add this to your product template (Online Store 2.0):
+
+```html
+<div class="see-it-cta">
+  <button 
+    id="see-it-button"
+    data-product-id="{{ product.id }}"
+    data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+    data-product-title="{{ product.title }}"
+  >
+    See It In Your Home
+  </button>
+</div>
+
+<script>
+  document.getElementById('see-it-button').addEventListener('click', function() {
+    const productId = this.dataset.productId;
+    const variantId = this.dataset.variantId;
+    const productTitle = this.dataset.productTitle;
+    
+    window.open(
+      `https://your-app-domain.com?productId=${productId}&variantId=${variantId}&productTitle=${encodeURIComponent(productTitle)}`,
+      'SeeIt',
+      'width=420,height=800'
+    );
+  });
+</script>
+```
+
+### Option C: Headless Storefront
+
+For headless storefronts, embed the app using an iframe or script tag that loads the modal.
+
+## Step 14: Test the Installation
+
+1. **Test Admin Interface:**
+   - Go to Shopify admin → Apps → Your app
+   - Verify you can see products
+   - Configure metafields for a test product
+   - Test sandbox preview generation
+
+2. **Test Customer Modal:**
+   - Visit a product page on your storefront
+   - Click the "See It In Your Home" button
+   - Test the full flow:
+     - Upload/capture a room photo
+     - Crop the image
+     - Place the product
+     - Generate preview
+     - Send email
 
 ## Troubleshooting
 
-### Backend Issues
+### Admin Interface Not Loading
 
-- Check Cloud Run logs: `gcloud run services logs read see-it-backend`
-- Verify environment variables are set correctly
-- Ensure service account has proper permissions
-
-### Frontend Issues
-
-- Check Vercel deployment logs
-- Verify `NEXT_PUBLIC_BACKEND_URL` points to your Cloud Run service
+- Verify app URL is correct in Partner Dashboard
+- Check that app is installed on the store
+- Ensure `NEXT_PUBLIC_SHOPIFY_API_KEY` is set correctly
 - Check browser console for errors
 
-### Authentication Issues
+### Session Token Errors
 
-- Verify Shopify API credentials are correct
-- Ensure app URLs match in Shopify Partner Dashboard
-- Check that session tokens are being generated correctly
+- Verify `SHOPIFY_API_KEY` matches your app's API key
+- Check that `SHOPIFY_SHOP` and `SHOPIFY_ALLOWED_SHOPS` include your store domain
+- Ensure backend is accessible from frontend
+
+### Product Data Not Loading
+
+- Verify `SHOPIFY_ADMIN_ACCESS_TOKEN` is set correctly
+- Check that scopes include `read_products`
+- Verify metafields exist for the product
+
+### Preview Generation Failing
+
+- Check Vertex AI quota and API access
+- Verify `VERTEX_LOCATION` and `VERTEX_MODEL` are correct
+- Check Cloud Run logs: `gcloud run services logs read see-it-backend`
 
 ### Storage Issues
 
@@ -408,9 +500,14 @@ Embed the app using Shopify App Bridge in your storefront code.
 - Test with real products
 - Gradually roll out to customers
 
-## Support
+## Key Differences from Traditional Shopify Apps
 
-For issues or questions:
-- Check the [Shopify Integration docs](docs/shopify-integration.md)
-- Review [Phase 1 Deployment](docs/phase-1-deployment.md)
-- Check backend logs and frontend console for errors
+This app uses **Shopify App Bridge**, which means:
+
+1. **No OAuth Flow Needed** - Shopify handles authentication automatically
+2. **Session Tokens** - Provided via App Bridge `getSessionToken()`
+3. **Embedded in Admin** - Admin interface loads directly in Shopify admin
+4. **Storefront Integration** - Customer modal embedded in product pages
+5. **Simpler Setup** - Less code, Shopify handles more infrastructure
+
+The backend still needs an Admin API access token to read product data, but the frontend authentication is handled entirely by App Bridge.

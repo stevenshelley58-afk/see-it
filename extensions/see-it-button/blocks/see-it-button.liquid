@@ -1,0 +1,159 @@
+{% comment %}
+  See It In Your Home Button Block
+  
+  This block adds a "See It In Your Home" button to product pages.
+  When clicked, it opens the See It modal in a popup window.
+  
+  Settings:
+  - button_text: Customize button text
+  - button_style: Choose button style (primary/secondary)
+  - button_size: Choose button size (small/medium/large)
+  - position: Choose alignment (left/center/right)
+{% endcomment %}
+
+{% liquid
+  # Get product and variant IDs
+  assign product_id = product.id | split: '/' | last
+  assign variant_id = product.selected_or_first_available_variant.id | split: '/' | last
+  assign product_title = product.title | escape
+  assign shop_domain = shop.domain
+  assign locale = request.locale.iso_code | default: 'en'
+  
+  # Get app URL from block settings or use default
+  assign app_url = block.settings.app_url | default: 'https://see-it.vercel.app'
+  
+  # Build modal URL with query parameters
+  assign modal_url = app_url | append: '?productId=' | append: product_id | append: '&variantId=' | append: variant_id | append: '&productTitle=' | append: product_title | append: '&locale=' | append: locale | append: '&shop=' | append: shop_domain
+%}
+
+<div class="see-it-button-wrapper see-it-button-{{ block.settings.position }}" {{ block.shopify_attributes }}>
+  <button
+    type="button"
+    class="see-it-button see-it-button-{{ block.settings.button_style }} see-it-button-{{ block.settings.button_size }}"
+    onclick="openSeeItModal('{{ modal_url | escape }}')"
+    aria-label="{{ block.settings.button_text | default: 'See It In Your Home' }}"
+  >
+    {{ block.settings.button_text | default: 'See It In Your Home' }}
+  </button>
+</div>
+
+<script>
+  function openSeeItModal(url) {
+    // Open modal in popup window
+    const width = 420;
+    const height = 800;
+    const left = (screen.width - width) / 2;
+    const top = (screen.height - height) / 2;
+    
+    const popup = window.open(
+      url,
+      'SeeIt',
+      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+    
+    // Focus the popup
+    if (popup) {
+      popup.focus();
+    }
+    
+    // Track analytics event if available
+    if (typeof window !== 'undefined' && window.dataLayer) {
+      window.dataLayer.push({
+        event: 'seeit_modal_opened',
+        productId: '{{ product_id }}',
+        variantId: '{{ variant_id }}'
+      });
+    }
+  }
+</script>
+
+{% schema %}
+{
+  "name": "See It In Your Home",
+  "target": "section",
+  "available_if": {
+    "target": "product"
+  },
+  "settings": [
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "See It In Your Home",
+      "info": "Customize the button text"
+    },
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "App URL",
+      "default": "https://see-it.vercel.app",
+      "info": "Your See It app URL (update after deployment)"
+    },
+    {
+      "type": "select",
+      "id": "button_style",
+      "label": "Button Style",
+      "options": [
+        {
+          "value": "primary",
+          "label": "Primary (Black)"
+        },
+        {
+          "value": "secondary",
+          "label": "Secondary (White)"
+        },
+        {
+          "value": "outline",
+          "label": "Outline"
+        }
+      ],
+      "default": "primary"
+    },
+    {
+      "type": "select",
+      "id": "button_size",
+      "label": "Button Size",
+      "options": [
+        {
+          "value": "small",
+          "label": "Small"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "large",
+          "label": "Large"
+        }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "select",
+      "id": "position",
+      "label": "Alignment",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ],
+      "default": "center"
+    }
+  ],
+  "presets": [
+    {
+      "name": "See It In Your Home"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,115 @@
+{% comment %}
+  See It In Your Home Button - Manual Installation Snippet
+  
+  This is a standalone snippet you can add directly to your theme.
+  No Shopify app required!
+  
+  Instructions:
+  1. Copy this entire file
+  2. Go to Online Store → Themes → Actions → Edit code
+  3. Create new snippet: snippets/see-it-button.liquid
+  4. Paste this code
+  5. Update the app_url below to your deployed app URL
+  6. Add {% render 'see-it-button' %} to your product template
+{% endcomment %}
+
+{% liquid
+  # Get product data
+  assign product_id = product.id | split: '/' | last
+  assign variant_id = product.selected_or_first_available_variant.id | split: '/' | last
+  assign product_title = product.title | escape
+  assign shop_domain = shop.domain
+  assign locale = request.locale.iso_code | default: 'en'
+  
+  # UPDATE THIS to your deployed app URL!
+  assign app_url = 'https://your-app.vercel.app'
+  
+  # Build modal URL with query parameters
+  assign modal_url = app_url | append: '?productId=' | append: product_id | append: '&variantId=' | append: variant_id | append: '&productTitle=' | append: product_title | append: '&locale=' | append: locale | append: '&shop=' | append: shop_domain
+%}
+
+<div class="see-it-button-wrapper" style="margin: 20px 0; text-align: center;">
+  <button
+    type="button"
+    class="see-it-button"
+    onclick="openSeeItModal('{{ modal_url | escape }}')"
+    style="
+      display: inline-block;
+      background-color: #000000;
+      color: #ffffff;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      transition: background-color 0.2s ease;
+    "
+    onmouseover="this.style.backgroundColor='#333333'"
+    onmouseout="this.style.backgroundColor='#000000'"
+    aria-label="See It In Your Home"
+  >
+    See It In Your Home
+  </button>
+</div>
+
+<script>
+  function openSeeItModal(url) {
+    // Open modal in popup window
+    const width = 420;
+    const height = 800;
+    const left = (screen.width - width) / 2;
+    const top = (screen.height - height) / 2;
+    
+    const popup = window.open(
+      url,
+      'SeeIt',
+      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+    
+    // Focus the popup
+    if (popup) {
+      popup.focus();
+    }
+    
+    // Track analytics event if available
+    if (typeof window !== 'undefined' && window.dataLayer) {
+      window.dataLayer.push({
+        event: 'seeit_modal_opened',
+        productId: '{{ product_id }}',
+        variantId: '{{ variant_id }}'
+      });
+    }
+  }
+</script>
+
+<style>
+  .see-it-button-wrapper {
+    margin: 20px 0;
+  }
+  
+  .see-it-button {
+    transition: all 0.2s ease;
+  }
+  
+  .see-it-button:hover {
+    background-color: #333333 !important;
+  }
+  
+  .see-it-button:active {
+    background-color: #1a1a1a !important;
+  }
+  
+  .see-it-button:focus {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+  
+  @media (max-width: 768px) {
+    .see-it-button {
+      width: 100%;
+      padding: 14px 24px;
+    }
+  }
+</style>

@@ -1,0 +1,89 @@
+.see-it-modal {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.see-it-modal.hidden {
+  display: none;
+}
+
+.see-it-modal:not(.hidden) {
+  display: block;
+}
+
+.see-it-modal-content {
+  background-color: #fefefe;
+  margin: 15% auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 80%;
+  max-width: 600px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.see-it-close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.see-it-close:hover,
+.see-it-close:focus {
+  color: black;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.see-it-step.hidden {
+  display: none;
+}
+
+.draggable {
+  touch-action: none;
+  user-select: none;
+}
+
+/* Scale slider styling */
+#see-it-scale-slider {
+  cursor: pointer;
+}
+
+#see-it-scale-value {
+  color: #333;
+  font-weight: bold;
+}
+
+/* Error message styling */
+.see-it-error {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  color: #c00;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.see-it-error.hidden {
+  display: none;
+}
+
+/* Action buttons */
+.see-it-retry-btn {
+  background-color: #007bff;
+  color: white;
+}
+
+.see-it-retry-btn:hover {
+  background-color: #0056b3;
+}

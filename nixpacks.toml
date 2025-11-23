@@ -1,11 +1,2 @@
 [phases.setup]
-nixPkgs = ["nodejs-20_x"]
-
-[phases.install]
-cmds = ["cd app && npm install"]
-
-[phases.build]
-cmds = ["cd app && npm run build"]
-
-[start]
-cmd = "cd app && npm run start"
+nixPkgs = ["openssl", "nodejs_20"]

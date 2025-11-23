@@ -37,10 +37,3 @@
 ## Phase 7: Advanced Enhancements
 - [x] Analytics Dashboard (app.analytics.jsx)
 - [x] Multi-Room Sessions (localStorage-based, frontend-only)
-
-## Phase 8: Deployment & Handoff
-- [x] Redeploy Railway Service ("See-It")
-- [/] Run Production Migrations
-- [ ] Verify Environment Variables
-- [ ] Verify Image Service
-- [ ] Local Verification & Dev Store Install
